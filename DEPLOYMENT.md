@@ -24,7 +24,7 @@ In Supabase Authentication settings:
 - Set minimum password length to **12**, and enable appropriate password protections available to your project.
 - Set **Site URL** to your canonical frontend origin, e.g. `https://support.example.com` (no path/trailing slash).
 - Add **exact** redirect URLs for `https://support.example.com/accept-invitation` and `https://support.example.com/reset-password`.
-- In the development project add `http://localhost:5173/accept-invitation` and `http://localhost:5173/reset-password`. Do not add development or broad wildcard preview callbacks to production.
+- In the development project add `http://127.0.0.1:5173/accept-invitation` and `http://127.0.0.1:5173/reset-password` for the default `npm run dev` address. If using `localhost`, add its two exact callback URLs too. Use the same origin in your browser, Site URL, `DEVCARE_SITE_URL` and Edge Function `SITE_URL`. Do not add development or broad wildcard preview callbacks to production.
 - For a Cloudflare preview, use a fixed preview branch URL and add its two exact callback URLs to the **preview Supabase project**.
 
 Apply the HTML from `supabase/templates/invitation.html` and `supabase/templates/recovery.html` to Supabase's Invite User and Reset Password email templates. They send recipients to `{{ .RedirectTo }}?token_hash={{ .TokenHash }}`. The browser verifies the one-time token with the matching `invite`/`recovery` type and removes it from the address bar. The app also supports Supabase's default implicit session redirect links. Never place invitation tokens in analytics, logs or issue reports. Referrer Policy prevents sending the query to a different origin.
@@ -39,6 +39,23 @@ In Supabase Auth → Email → SMTP, configure a provider you control:
 - Appropriate email rate limits for client invitations/recovery.
 
 Disable link tracking/rewrite and review mail scanner behavior for one-time links. Send actual invitation and recovery emails to an external mailbox, open them on desktop and phone, set/change the password, then log out and back in. Verify the exact destination origin and route. A successful API response alone does not verify delivery. Supabase's restricted default mail service is insufficient for production client onboarding.
+
+### Getting started without a domain: Gmail SMTP
+
+For initial low-volume setup, you can use a Gmail account you control if Google makes App Passwords available for it. Enable 2-Step Verification, open [Google App Passwords](https://myaccount.google.com/apppasswords), and create a dedicated App Password named `DevCare SMTP`. Work/school accounts and some protected accounts may not offer this feature; consult [Google's App Password requirements](https://support.google.com/accounts/answer/185833?hl=en).
+
+Enable custom SMTP in Supabase → Authentication → Email → SMTP Settings:
+
+| Setting      | Value                             |
+| ------------ | --------------------------------- |
+| Sender email | Your Gmail address                |
+| Sender name  | `DevCare`                         |
+| Host         | `smtp.gmail.com`                  |
+| Port         | `465`                             |
+| Username     | The same full Gmail address       |
+| Password     | The dedicated Google App Password |
+
+These settings use [Gmail's TLS SMTP service](https://developers.google.com/workspace/gmail/imap/imap-smtp?hl=en). Enter the App Password only in Supabase SMTP settings, never in Vite variables, source code, commands or support messages. Save the settings, check Auth rate limits, and retry **Manage Users → Invite User** for the existing client account. Gmail and Supabase quotas still apply. Verify actual delivery and callback/password setup before inviting real clients; move to a transactional email provider with an authenticated sending domain as your sending needs grow. Services such as [Resend SMTP](https://resend.com/docs/send-with-smtp) require a verified domain for sending to external clients.
 
 ## 4. Deploy Edge Functions and configure origins
 
@@ -64,7 +81,29 @@ Only an operator with the Supabase service-role key or trusted SQL editor access
 4. Open the invitation email at `/accept-invitation`, set a unique password of at least 12 characters, and verify your developer dashboard.
 5. Remove the local operator env file when finished. Protect the service key in your secret manager; rotate it if exposed.
 
-The bootstrap script refuses when any admin already exists. If an invitation was created but role promotion failed, rerun after fixing the problem; the script finds the existing profile. For an existing invited account without a valid link, use password recovery after confirming the account's email ownership.
+Rerunning bootstrap for the same active admin reports that the account is ready and sends no email. It refuses to create another admin or reactivate a disabled admin. If an invitation was created but role promotion failed, rerun after fixing the problem; the script finds the existing profile. For an existing invited account without a valid link, use password recovery after confirming the account's email ownership.
+
+### Invitation or admin login troubleshooting
+
+- `VITE_SUPABASE_URL` must be `https://YOUR_PROJECT_REF.supabase.co`, **not** `https://supabase.com/dashboard/project/...`. It must match the project in `.env.admin`. Find the API URL and publishable key in the project's Connect dialog. Only the publishable/legacy anon key belongs in Vite variables; never add `VITE_SUPABASE_SERVICE_ROLE_KEY`.
+- `DEVCARE_SITE_URL` is the frontend **origin**, such as `http://127.0.0.1:5173`, without `/login`. Restart `npm run dev` after editing `.env.local`.
+- In the hosted Supabase dashboard, Authentication → URL Configuration, set the Site URL and add the exact `/accept-invitation` and `/reset-password` URLs for that origin. Editing local `supabase/config.toml` does not change hosted Auth settings.
+- If bootstrap reports an existing active admin, sign in with that email. If you have not set a password or the invitation has expired/already been used, open `/forgot-password`, request a fresh email, open its link on the same computer running Vite, and set a password of at least 12 characters. Localhost/127.0.0.1 links opened on a phone point to the phone, not your development computer.
+- If no email arrives, check spam, SMTP delivery logs, sender verification and Auth email limits. An accepted invite API call does not prove delivery. Follow the SMTP and email-template configuration above. Never paste invitation/reset URLs into support messages; they contain login credentials.
+- `email_address_not_authorized` means the built-in Supabase mail service refuses external recipients: it sends only to the Supabase organization's team members. Configure custom SMTP for client invitations; waiting for the hourly limit does not remove this restriction. Do not add clients to your Supabase organization as a workaround.
+- The invitation function distinguishes recipient restrictions, rate limits, existing Auth accounts, invalid email addresses and Auth provider failures. It records only the operation name and an allowlisted error code/status, never raw SMTP errors, addresses or tokens. Use Supabase Authentication logs to investigate provider failures. Existing confirmed client users are assigned without email; failed invitations preserve the client business record and entered form values.
+
+### Email rate limits and existing-admin password recovery
+
+Supabase's built-in email provider allows only **two Auth emails per hour per project**, shared by email-sending endpoints. Password recovery also has a per-user cooldown. Stop requesting more emails when rate limited; wait for the sending quota to become available or configure custom SMTP. Check Authentication → Rate Limits after configuring SMTP; raising the built-in provider's limit is not supported. See [Supabase rate limits](https://supabase.com/docs/guides/auth/rate-limits) and [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp).
+
+For an **existing active admin with a confirmed email**, a trusted operator can set a password without sending a recovery email:
+
+```powershell
+npm run recover:admin
+```
+
+Run this from the repository in your own interactive terminal with the ignored `.env.admin` configured as above. Enter your chosen password twice at the hidden prompts, then sign in normally with `DEVCARE_ADMIN_EMAIL`. No characters appear while typing. Do not put the password in chat, command arguments, environment variables or files. This command uses the server-only Auth Admin API; it checks the existing profile's admin role/activity and the matching confirmed Auth user before accepting the password. It cannot create accounts, confirm email addresses, grant roles or enable disabled users. It refuses piped/noninteractive input and does not print passwords, keys, Auth responses or recovery links. Protect/remove `.env.admin` afterward. Custom SMTP remains required before client onboarding.
 
 Operator recovery: first use the Supabase dashboard to invite/identify your verified Auth user, then execute the following in the **trusted SQL editor**, substituting that known Auth UUID. Never expose this operation as a public RPC:
 
@@ -118,6 +157,58 @@ The publishable key is intentionally public and relies on RLS. Do not add servic
 Cloudflare copies `public/_redirects` and `_headers` into `dist`. The explicit SPA rewrite `/* /index.html 200` supports direct navigation and refresh at `/tickets/:id`, `/projects/:id` and auth routes. There is no Pages Function that overrides this rule. Response headers restrict framing, script sources and connections. If using a custom Supabase API domain, update `connect-src` in `_headers` to that exact HTTPS/WSS origin; the shipped policy permits `*.supabase.co`. Do not loosen it to unrestricted connections.
 
 Deploy a preview first. Verify login, invitation/recovery callbacks, client/admin routes, phone navigation, private files, notifications and refresh of a nested ticket URL on the **actual Pages origin**. Preview testing must use preview backend data. Deploy production only when CI, real integration checks, SMTP delivery, bootstrap and origin settings are complete. Review a failed build/deployment before retrying; a successful local build is not a deployed URL.
+
+## 7a. Vercel deployment
+
+Vercel can host the same frontend while PostgreSQL, Auth, Storage and Edge Functions stay in Supabase. The user requested this additional hosting option. `vercel.json` sets the Vite preset, `npm ci`, `npm run build`, `dist`, SPA rewrites and security headers. Vercel does not interpret Cloudflare's `_redirects` or `_headers` files. Node 24 is selected by `package.json`; set Node **24.x** in Vercel's Build and Deployment settings too.
+
+Check the account's plan before a commercial launch: [Vercel Hobby permits only non-commercial personal use](https://vercel.com/docs/plans/hobby). A portal used for freelance client support needs a plan that permits commercial use. No plan purchase or upgrade is automated by this repository.
+
+### GitHub import
+
+1. Commit and push the current reviewed source, including `vercel.json`, `.vercelignore`, `package-lock.json` and the latest application fixes. Importing GitHub deploys the pushed commit, not uncommitted local work. Do not commit `.env*` credentials or `.vercel/` state.
+2. In Vercel → Add New → Project, import `bernstain-dev/DevCare` using your authenticated GitHub/Vercel accounts.
+3. Use framework **Vite**, root directory **repository root**, install command **`npm ci`**, build command **`npm run build`**, output directory **`dist`**, Node **24.x**.
+4. Set only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` as frontend build variables. Copy the values for the correct Supabase environment; do not use the Supabase dashboard URL. Do not import `.env.admin` or add service-role/SMTP credentials to Vercel.
+5. Use separate preview and production Supabase projects and set each variable's Vercel environment scope accordingly. Vite values are embedded during build; changing them requires a redeploy. Keep real client data out of previews.
+6. Deploy and copy the actual assigned HTTPS URL. Do not assume that `devcare.vercel.app` is available or that an arbitrary preview URL is permanent.
+
+### CLI preview
+
+Authenticate in your own terminal; do not paste tokens into chat or shell arguments:
+
+```powershell
+npx --yes vercel@63.1.0 login
+npx --yes vercel@63.1.0 link
+```
+
+Select the intended account/team and project. `.vercel/` local state is gitignored. `.vercelignore` also excludes local environment files, operator scripts, caches and generated output from CLI source uploads. Configure **Preview** variables for an isolated Supabase test project through the Vercel dashboard, then deploy a preview:
+
+```powershell
+npx --yes vercel@63.1.0 deploy
+```
+
+The default CLI deployment is a preview. Do not add `--prod` until the launch checks and production configuration below are complete. Vercel deployment protection may require a Vercel login before a visitor can reach the app; review it deliberately for testers. Clients should eventually receive the canonical public production portal URL and authenticate inside DevCare.
+
+If the default npm cache drive is full, keep both cache and CLI state in ignored workspace folders: `npm exec --cache .verification/npm-cache --yes --package vercel@63.1.0 -- vercel login --global-config .verification/vercel-user`. Use the same `--global-config .verification/vercel-user` option for subsequent `whoami`, `link` and `deploy` commands. This does not delete or change unrelated files. The CLI state contains credentials: keep it ignored and excluded from source uploads.
+
+### Connect hosted invitations, recovery and files
+
+After deployment, use the **actual** canonical HTTPS origin in the following settings. `https://YOUR_PORTAL.vercel.app` below is a placeholder, not a claimed deployment:
+
+1. In the matching Supabase project → Authentication → URL Configuration, set **Site URL** to `https://YOUR_PORTAL.vercel.app` and allow exactly `https://YOUR_PORTAL.vercel.app/accept-invitation` and `https://YOUR_PORTAL.vercel.app/reset-password`.
+2. Set Edge Function `SITE_URL` and `ALLOWED_ORIGINS` to that origin:
+
+```powershell
+npx --yes supabase@2.120.0 secrets set SITE_URL=https://YOUR_PORTAL.vercel.app ALLOWED_ORIGINS=https://YOUR_PORTAL.vercel.app
+```
+
+3. Retain both deployed Supabase functions (`admin-users` and `files`). The origin secret update applies to both. If supporting other origins, explicitly include their exact origins in `ALLOWED_ORIGINS` only for the appropriate environment; do not use a wildcard. The single `SITE_URL` controls the invitation destination.
+4. Update ignored operator `DEVCARE_SITE_URL` for future bootstrap operations. Do not overwrite an existing admin or resend invitations until the hosted origin and SMTP setup are verified. Previously sent emails keep their old destination; issue a fresh invitation/reset when appropriate.
+5. Confirm custom SMTP is saved and test actual invitation delivery, password setup and recovery on another device. A `.vercel.app` address hosts the frontend; it does not provide an email-sending domain or fix SMTP delivery by itself.
+6. Verify direct loads and refreshes at `/login`, `/accept-invitation`, `/reset-password`, `/projects/:id` and `/tickets/:id`, browser security headers, role isolation, private attachments and disabled-user enforcement on the hosted origin. Do not run the destructive/disposable integration suite against the real client project.
+
+After these checks and all release requirements pass, promote the verified deployment through Vercel or deploy the reviewed source with `npx --yes vercel@63.1.0 deploy --prod`, using production-scoped frontend variables. A frontend rollback does not roll back Supabase migrations, Auth settings, secrets or stored data. Maintain the same backup and migration rollback precautions documented below. See [Vercel's Vite SPA guide](https://vercel.com/docs/frameworks/frontend/vite) and [deployment environments](https://vercel.com/docs/deployments/environments).
 
 ## 8. Private files and maintenance
 

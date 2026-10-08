@@ -1,6 +1,6 @@
 # DevCare — Client Support and Project Ticketing System
 
-A working, invitation-only support portal for a freelance developer and their clients. React/TypeScript/Vite frontend, Supabase PostgreSQL/Auth/private Storage backend, and Cloudflare Pages hosting. No mock-data mode or bundled credentials. Without frontend configuration, the app displays setup instructions rather than pretending to be connected.
+A working, invitation-only support portal for a freelance developer and their clients. React/TypeScript/Vite frontend, Supabase PostgreSQL/Auth/private Storage backend, with deployment configuration for Cloudflare Pages and Vercel. No mock-data mode or bundled credentials. Without frontend configuration, the app displays setup instructions rather than pretending to be connected.
 
 ## Features
 
@@ -21,7 +21,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:5173`. Complete the backend instructions in [DEPLOYMENT.md](DEPLOYMENT.md) first. For local Supabase:
+Open `http://127.0.0.1:5173`. Complete the backend instructions in [DEPLOYMENT.md](DEPLOYMENT.md) first; [the Vercel section](DEPLOYMENT.md#7a-vercel-deployment) covers Vercel Git/CLI deployment and hosted invitation callbacks. For local Supabase:
 
 ```powershell
 npx --yes supabase@2.120.0 start

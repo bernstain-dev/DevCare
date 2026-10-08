@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowRight, CodeXml, LockKeyhole, ShieldCheck } from 'lucide-react'
-import { supabase, configured } from '../lib/supabase'
+import { supabase, configured, configurationError } from '../lib/supabase'
 import { loginSchema, passwordSchema } from '../lib/validation'
 import { ErrorBox, Field, Notice, Spinner, Success } from '../components/ui'
 import { useAuth } from '../auth/AuthProvider'
@@ -15,6 +15,7 @@ export function SetupPage() {
       <CodeXml size={38} />
       <h1>DevCare is ready to connect.</h1>
       <p>Configure your Supabase project to start using the support portal.</p>
+      {configurationError && <ErrorBox error={configurationError} />}
       <ol>
         <li>
           Copy <code>.env.example</code> to <code>.env.local</code>.
@@ -231,7 +232,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'forgot' | 'reset' | 'invit
                 {mode === 'reset' ? (
                   <Link to="/forgot-password">Request another reset link.</Link>
                 ) : (
-                  'Ask your developer for a new invitation if the link has expired.'
+                  <span>
+                    Already accepted an invitation?{' '}
+                    <Link to="/forgot-password">Set your password using a fresh reset link.</Link>{' '}
+                    Otherwise, ask your developer for a new invitation.
+                  </span>
                 )}
               </Notice>
             ))}

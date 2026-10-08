@@ -1,0 +1,17 @@
+.env*
+**/.env*
+.git/
+.vercel/
+node_modules/
+dist/
+.verification/
+.github/
+scripts/
+tests/
+test-results/
+playwright-report/
+coverage/
+supabase/.temp/
+supabase/.branches/
+*.log
+*.tsbuildinfo

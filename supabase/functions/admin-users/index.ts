@@ -8,6 +8,7 @@ import {
   json,
   requireAdmin,
 } from '../_shared/http.ts'
+import { invitationCallback, invitationFailure } from './invitation.ts'
 
 Deno.serve(async (req) => {
   let headers: HeadersInit = {}
@@ -55,18 +56,27 @@ Deno.serve(async (req) => {
       needsInvitation = !lookup.data.user.email_confirmed_at
     }
     if (needsInvitation) {
-      const site = Deno.env.get('SITE_URL')
-      if (!site || !/^https?:\/\//.test(site))
-        throw new HttpError(500, 'Invitation callback is not configured')
+      const redirectTo = invitationCallback(Deno.env.get('SITE_URL'))
+      if (!redirectTo)
+        throw new HttpError(
+          500,
+          'Set the Edge Function SITE_URL to the frontend origin, without /login or another path, and allow its exact /accept-invitation callback in Auth settings.',
+        )
       const result = await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${site.replace(/\/$/, '')}/accept-invitation`,
+        redirectTo,
         data: { display_name: name },
       })
-      if (result.error || !result.data.user)
-        throw new HttpError(
-          400,
-          'Invitation could not be sent. Check SMTP and whether the email already has an account.',
+      if (result.error || !result.data.user) {
+        const detail = invitationFailure(result.error)
+        console.warn(
+          JSON.stringify({
+            operation: 'client_invitation',
+            code: detail.code,
+            status: detail.status,
+          }),
         )
+        throw new HttpError(detail.status, `${detail.message} (${detail.code})`)
+      }
       userId = result.data.user.id
       invited = true
     }

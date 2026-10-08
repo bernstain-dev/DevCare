@@ -205,6 +205,49 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
   })
   return { ticket }
 }
+test('failed client invitations keep input and retry only when requested', async ({ page }) => {
+  await portal(page, 'admin')
+  let attempts = 0
+  await page.route('https://devcare-test.supabase.co/functions/v1/admin-users', async (route) => {
+    if (route.request().method() === 'OPTIONS')
+      return route.fulfill({
+        status: 204,
+        headers: {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'POST, OPTIONS',
+          'access-control-allow-headers': '*',
+        },
+      })
+    attempts++
+    return route.fulfill({
+      status: attempts === 1 ? 403 : 200,
+      headers: { 'access-control-allow-origin': '*' },
+      json:
+        attempts === 1
+          ? {
+              error:
+                'Supabase’s default email service cannot send to this client. Configure custom SMTP, then retry Invite User. (email_address_not_authorized)',
+            }
+          : { message: 'Invitation sent and membership assigned.' },
+    })
+  })
+  await page.goto('/clients')
+  await page.getByRole('button', { name: 'Manage Users' }).click()
+  await page.getByLabel('Full name', { exact: true }).fill('First Client User')
+  await page.getByLabel('Email address', { exact: true }).fill('first-client@example.test')
+  await page.getByRole('button', { name: 'Invite User', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Configure custom SMTP')
+  await expect(page.getByLabel('Email address', { exact: true })).toHaveValue(
+    'first-client@example.test',
+  )
+  expect(attempts).toBe(1)
+  await page.getByRole('button', { name: 'Invite User', exact: true }).click()
+  await expect(
+    page.getByText('Invitation sent and membership assigned.', { exact: true }),
+  ).toBeVisible()
+  expect(attempts).toBe(2)
+})
+
 test('login, recovery and invitation screens validate input', async ({ page }) => {
   await portal(page, 'client', false)
   await page.goto('/login')

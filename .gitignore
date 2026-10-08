@@ -12,3 +12,4 @@ supabase/.branches/
 coverage/
 *.log
 .verification/
+.vercel/

@@ -11,7 +11,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/admin-setup.test.mjs",
     "test:watch": "vitest",
     "test:database": "node scripts/test-database.mjs",
     "test:integration": "node --env-file=.env.test scripts/integration.mjs",
@@ -19,6 +19,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "bootstrap:admin": "node --env-file=.env.admin scripts/bootstrap-admin.mjs",
+    "recover:admin": "node --env-file=.env.admin scripts/recover-admin.mjs",
     "seed:dev": "node --env-file=.env.test scripts/seed-dev.mjs"
   },
   "dependencies": {
