@@ -1,0 +1,11 @@
+# DevCare conventions
+
+React 19, TypeScript strict, Vite, Tailwind 4, React Router, TanStack Query, React Hook Form and Zod. Node 24 LTS. Supabase PostgreSQL/Auth/private Storage; privileged operations run in Deno Edge Functions. Cloudflare Pages serves `dist` with SPA fallback. Do not replace this architecture with a different hosting/backend platform.
+
+`src/lib` contains data types, validation and Supabase adapters; `src/auth` session handling; `src/components` shared accessible controls; `src/pages` route screens. SQL migrations are authoritative for authorization and workflow. Mutations use narrowly scoped SECURITY DEFINER RPCs with fixed search paths and explicit grants. Tables are read-only to clients except own notification read-state. Never trust browser role, client IDs, authors, priorities or status transitions. Private notes are a separate table with admin-only RLS. Disabled profiles, memberships and businesses must be checked on every data operation, including existing JWT sessions. File bytes pass through an authenticated Edge Function and are validated before private upload. Do not add browser storage write policies or public buckets.
+
+No public signup. Auth triggers never accept roles from user metadata. Only a verified active admin may use elevated credentials in admin functions. Service-role/SMTP/secret values never enter VITE variables, committed files, error output or browser bundles. Preserve history; archive projects. UTC storage, Asia/Manila display. Keep test accounts isolated from production.
+
+Verification: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:browser`. Integration: copy `.env.test.example` to `.env.test`, configure disposable Supabase, apply migrations/deploy functions, then `npm run test:integration`. Report only executed checks. No deployment claim without a successful actual deployment result. Do not run destructive tests against a live client project.
+
+Run routine reversible implementation independently. Production release requires migrated DB, configured SMTP/callbacks, verified security/integration checks and correct environment variables. Document external blockers honestly. Do not commit generated output or secrets.

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env*
+!.env.example
+!.env.test.example
+!.env.admin.example
+*.tsbuildinfo
+playwright-report/
+test-results/
+supabase/.temp/
+supabase/.branches/
+coverage/
+*.log
+.verification/
