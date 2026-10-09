@@ -1,11 +1,13 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { CodeXml, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { useAuth } from './auth/AuthProvider'
 import { configured } from './lib/supabase'
 import { Layout } from './components/Layout'
 import { ErrorBox, Spinner } from './components/ui'
 import { AuthPage, SetupPage } from './pages/AuthPages'
+import { Brand } from './components/Brand'
+import { DocumentTitle } from './components/DocumentTitle'
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })))
 const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })))
 const ProjectDetails = lazy(() =>
@@ -41,7 +43,7 @@ function Guard() {
   if (!profile.active)
     return (
       <div className="setup">
-        <CodeXml size={36} />
+        <Brand to="/login" label="DevCare sign in" />
         <h1>Your access is disabled.</h1>
         <p>Contact your developer to restore access.</p>
         <button className="btn gray" onClick={() => void logout()}>
@@ -59,6 +61,7 @@ function AdminOnly() {
 export function App() {
   return (
     <>
+      <DocumentTitle />
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>

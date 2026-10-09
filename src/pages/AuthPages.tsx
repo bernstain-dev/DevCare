@@ -3,16 +3,17 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowRight, CodeXml, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { supabase, configured, configurationError } from '../lib/supabase'
 import { loginSchema, passwordSchema } from '../lib/validation'
 import { ErrorBox, Field, Notice, Spinner, Success } from '../components/ui'
 import { useAuth } from '../auth/AuthProvider'
+import { Brand } from '../components/Brand'
 
 export function SetupPage() {
   return (
     <div className="setup">
-      <CodeXml size={38} />
+      <Brand to="/login" label="DevCare sign in" />
       <h1>DevCare is ready to connect.</h1>
       <p>Configure your Supabase project to start using the support portal.</p>
       {configurationError && <ErrorBox error={configurationError} />}
@@ -91,12 +92,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'forgot' | 'reset' | 'invit
   return (
     <div className="auth-layout">
       <aside className="auth-brand">
-        <Link className="brand" to="/">
-          <span className="brand-icon">
-            <CodeXml />
-          </span>
-          DevCare<span className="brand-dot">.</span>
-        </Link>
+        <Brand to="/login" label="DevCare sign in" className="brand-light-panel" />
         <div>
           <span className="eyebrow light">LESS CHAT. MORE CLARITY.</span>
           <h1>
@@ -123,7 +119,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'forgot' | 'reset' | 'invit
       <main id="main-content" className="auth-main">
         <div className="auth-card">
           <div className="auth-mobile-brand">
-            <CodeXml /> DevCare
+            <Brand to="/login" label="DevCare sign in" />
           </div>
           <div className="auth-lock">
             <LockKeyhole size={24} />

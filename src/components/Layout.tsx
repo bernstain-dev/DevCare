@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Bell,
-  CodeXml,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -13,10 +12,13 @@ import {
   Users,
   X,
   ArrowUpRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { ErrorBox } from './ui'
+import { Brand } from './Brand'
 
 const mediaQuery = '(max-width: 950px)'
 function subscribeMobile(callback: () => void) {
@@ -30,7 +32,9 @@ export function Layout() {
   const { profile, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const mobile = useSyncExternalStore(subscribeMobile, isMobile)
+  const compactSidebar = collapsed && !mobile
   const menu = useRef<HTMLButtonElement>(null)
   const closeNavigation = () => {
     setOpen(false)
@@ -60,7 +64,7 @@ export function Layout() {
   ]
   return (
     <div
-      className="app-layout"
+      className={`app-layout ${compactSidebar ? 'sidebar-collapsed' : ''}`}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && open) closeNavigation()
       }}
@@ -68,13 +72,17 @@ export function Layout() {
       {open && (
         <button className="nav-overlay" aria-label="Close navigation" onClick={closeNavigation} />
       )}
-      <aside className={`sidebar ${open ? 'open' : ''}`} inert={mobile && !open}>
-        <Link to="/" className="brand" onClick={() => setOpen(false)}>
-          <span className="brand-icon">
-            <CodeXml />
-          </span>
-          DevCare<span className="brand-dot">.</span>
-        </Link>
+      <aside
+        id="workspace-sidebar"
+        className={`sidebar ${open ? 'open' : ''}`}
+        inert={mobile && !open}
+      >
+        <Brand
+          variant={compactSidebar || mobile ? 'icon' : 'full'}
+          showName={mobile}
+          className={compactSidebar || mobile ? 'sidebar-compact-brand' : 'brand-light-panel'}
+          onClick={() => setOpen(false)}
+        />
         <button
           className="mobile-close icon-btn"
           aria-label="Close navigation"
@@ -82,38 +90,64 @@ export function Layout() {
         >
           <X />
         </button>
-        <div className="workspace-label">{admin ? 'DEVELOPER WORKSPACE' : 'CLIENT WORKSPACE'}</div>
+        <div className="workspace-heading">
+          {!compactSidebar && (
+            <div className="workspace-label">
+              {admin ? 'DEVELOPER WORKSPACE' : 'CLIENT WORKSPACE'}
+            </div>
+          )}
+          {!mobile && (
+            <button
+              className="icon-btn sidebar-toggle"
+              aria-label={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!compactSidebar}
+              aria-controls="workspace-sidebar"
+              onClick={() => setCollapsed((value) => !value)}
+            >
+              {compactSidebar ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+          )}
+        </div>
         <nav aria-label="Main navigation">
           {links.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
+              aria-label={label}
+              title={compactSidebar ? label : undefined}
               onClick={() => setOpen(false)}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <Icon size={19} />
-              <span>{label}</span>
+              <span className={compactSidebar ? 'sr-only' : 'nav-label'}>{label}</span>
               {to === '/notifications' && unread > 0 && <span className="nav-count">{unread}</span>}
             </NavLink>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="support-note">
-            <span className="availability-dot" />
-            <strong>A little clarity goes a long way.</strong>
-            <p>Keep project updates and conversations in one place.</p>
-            <Link to="/tickets/new" onClick={() => setOpen(false)}>
-              Submit a ticket
-              <ArrowUpRight size={16} />
-            </Link>
-          </div>
-          <div className="sidebar-profile">
-            <span className="avatar">{profile?.display_name.slice(0, 2).toUpperCase()}</span>
-            <div>
-              <strong>{profile?.display_name}</strong>
-              <small>{admin ? 'Developer / Admin' : 'Client account'}</small>
+          {!compactSidebar && (
+            <div className="support-note">
+              <span className="availability-dot" />
+              <strong>A little clarity goes a long way.</strong>
+              <p>Keep project updates and conversations in one place.</p>
+              <Link to="/tickets/new" onClick={() => setOpen(false)}>
+                Submit a ticket
+                <ArrowUpRight size={16} />
+              </Link>
             </div>
+          )}
+          <div className="sidebar-profile">
+            <span className="avatar" title={profile?.display_name}>
+              {profile?.display_name.slice(0, 2).toUpperCase()}
+            </span>
+            {!compactSidebar && (
+              <div>
+                <strong>{profile?.display_name}</strong>
+                <small>{admin ? 'Developer / Admin' : 'Client account'}</small>
+              </div>
+            )}
             <button
               className="icon-btn"
               aria-label="Log out"
@@ -143,6 +177,7 @@ export function Layout() {
               <Menu />
             </button>
             <span className="portal-label">CLIENT SUPPORT PORTAL</span>
+            <Brand variant="icon" showName className="mobile-header-brand" />
             <span className="topbar-divider" />
             <span className="muted">A clearer way to work together.</span>
           </div>

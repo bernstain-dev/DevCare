@@ -69,6 +69,22 @@ This creates isolated test identities and history in the selected project. It ch
 
 With a **disposable development** project configured in `.env.test`, run `npm run seed:dev`. It creates one development client, membership and project using Auth Admin API. It prints no passwords; set credentials through the local dashboard or password recovery. The script requires `DEVCARE_TEST_ALLOW_RESET=YES_DISPOSABLE_PROJECT`. Seeds are never run automatically by migrations, builds or deployment.
 
+## Branding
+
+The supplied full logo and compact icon are stored unchanged in `public/branding/devcare-logo.png` and `public/branding/devcare-icon.png`. `src/components/Brand.tsx` provides accessible full-logo and compact variants. Authentication pages and the expanded desktop sidebar use the full logo; the mobile header/navigation and collapsed desktop sidebar use the compact icon. Full logos on dark panels sit on a light background so their green wordmark remains readable.
+
+Favicons use a revision derived from the compact icon's SHA-256 hash. The committed ICO contains 16, 32, 48, 64, 128 and 256px frames, alongside 16/32px PNGs and a 180px Apple touch icon. No web app manifest or service worker is introduced. To regenerate after replacing the compact source, use Python with the verified Pillow version (not needed for normal frontend builds):
+
+```powershell
+python -m pip install Pillow==12.2.0
+python scripts/generate-branding.py
+python scripts/generate-branding.py --check
+```
+
+The generator preserves transparency, uses deterministic Lanczos resizing, updates the favicon links in `index.html`, and never rewrites either supplied logo. Review and remove obsolete generated favicon files when changing the source revision. The default document title is `DevCare — Client Support Portal`; React Router navigation adds meaningful page-specific titles.
+
+The current Vercel workflow uses an explicit Preview deployment followed by assignment of the verified deployment to `devcare-rho.vercel.app`; automatic `main` deployments remain disabled. See [deployment instructions](DEPLOYMENT.md#current-short-testing-address). Branding changes require a frontend deployment only; do not change Supabase Auth, SMTP, email templates or email-provider profiles for a branding release.
+
 ## Structure
 
 | Path                                   | Responsibility                                       |

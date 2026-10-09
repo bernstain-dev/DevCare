@@ -416,3 +416,92 @@ test('dashboard and ticket page meet automated WCAG A/AA checks', async ({ page 
     ).toEqual([])
   }
 })
+
+test('supplied authentication logos and versioned favicons load after route refresh', async ({
+  page,
+}) => {
+  await portal(page, 'client', false)
+  const mobile = test.info().project.name === 'mobile'
+  const pages = [
+    ['/login', 'Sign In'],
+    ['/forgot-password', 'Forgot Password'],
+    ['/accept-invitation', 'Accept Invitation'],
+    ['/reset-password', 'Reset Password'],
+  ]
+  for (const [path, title] of pages) {
+    await page.goto(path)
+    await expect(page).toHaveTitle(`${title} | DevCare — Client Support Portal`)
+    const brand = page.locator(mobile ? '.auth-mobile-brand .brand' : '.auth-brand .brand')
+    await expect(brand).toBeVisible()
+    await expect(brand).toHaveAccessibleName('DevCare sign in')
+    await expect(brand).toHaveAttribute('href', '/login')
+    await expect(brand.locator('img')).toHaveAttribute('src', '/branding/devcare-logo.png')
+    expect(await brand.innerText()).toBe('')
+    await expect
+      .poll(() => brand.locator('img').evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBe(2172)
+    expect(await brand.locator('img').evaluate((image) => getComputedStyle(image).objectFit)).toBe(
+      'contain',
+    )
+    await page.screenshot({
+      path: `.verification/branding-${test.info().project.name}-${path.slice(1)}.png`,
+      fullPage: true,
+    })
+    await page.reload()
+    await expect(brand).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  }
+  const icons = await page
+    .locator('link[rel="icon"], link[rel="apple-touch-icon"]')
+    .evaluateAll((links) => links.map((link) => (link as HTMLLinkElement).href))
+  expect(icons).toHaveLength(4)
+  for (const url of icons) {
+    const response = await page.request.get(url)
+    expect(response.status()).toBe(200)
+    expect(response.headers()['content-type']).toMatch(/image\//)
+    expect((await response.body()).length).toBeGreaterThan(50)
+  }
+})
+
+test('desktop collapse and mobile navigation use the compact logo without losing navigation', async ({
+  page,
+}) => {
+  await portal(page)
+  await page.goto(`/tickets/${ticketId}`)
+  await expect(page.getByRole('heading', { name: 'Original report' })).toBeVisible()
+  await expect(page).toHaveTitle('Ticket Details | DevCare — Client Support Portal')
+  const sidebar = page.locator('.sidebar')
+  if (test.info().project.name === 'mobile') {
+    const headerBrand = page.locator('.mobile-header-brand')
+    await expect(headerBrand).toBeVisible()
+    await expect(headerBrand.locator('img')).toHaveAttribute('src', '/branding/devcare-icon.png')
+    expect(
+      await headerBrand.locator('img').evaluate((image) => image.getBoundingClientRect().width),
+    ).toBe(32)
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    await expect(sidebar.locator('.brand img')).toHaveAttribute('src', '/branding/devcare-icon.png')
+    await page.screenshot({ path: '.verification/branding-mobile-navigation.png', fullPage: true })
+    await sidebar.getByRole('link', { name: 'My Projects', exact: true }).click()
+    await expect(page).toHaveURL('/projects')
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible()
+  } else {
+    await expect(sidebar.locator('.brand img')).toHaveAttribute('src', '/branding/devcare-logo.png')
+    expect(await sidebar.locator('.brand').innerText()).toBe('')
+    await page.screenshot({ path: '.verification/branding-desktop-sidebar.png', fullPage: true })
+    await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+    await expect(sidebar.locator('.brand img')).toHaveAttribute('src', '/branding/devcare-icon.png')
+    await expect(page.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    await sidebar.getByRole('link', { name: 'My Projects', exact: true }).click()
+    await expect(page).toHaveURL('/projects')
+    await expect(page).toHaveTitle('Projects | DevCare — Client Support Portal')
+    await page.screenshot({ path: '.verification/branding-desktop-collapsed.png', fullPage: true })
+    await page.getByRole('button', { name: 'Expand sidebar' }).click()
+    await expect(sidebar.locator('.brand img')).toHaveAttribute('src', '/branding/devcare-logo.png')
+  }
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'My Projects', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
