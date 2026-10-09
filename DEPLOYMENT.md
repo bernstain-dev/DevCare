@@ -173,6 +173,8 @@ Check the account's plan before a commercial launch: [Vercel Hobby permits only 
 5. Use separate preview and production Supabase projects and set each variable's Vercel environment scope accordingly. Vite values are embedded during build; changing them requires a redeploy. Keep real client data out of previews.
 6. Deploy and copy the actual assigned HTTPS URL. Do not assume that `devcare.vercel.app` is available or that an arbitrary preview URL is permanent.
 
+The repository currently disables automatic Vercel deployments from `main` through `git.deploymentEnabled.main: false` in `vercel.json`. This keeps documentation/source pushes from releasing an unconfigured Production deployment. Other branches can still create previews. After the production backend, SMTP, callbacks, commercial plan and release checks are ready, enable `main` deliberately for Git-based production releases, or retain manual CLI releases.
+
 ### CLI preview
 
 Authenticate in your own terminal; do not paste tokens into chat or shell arguments:
@@ -185,10 +187,10 @@ npx --yes vercel@63.1.0 link
 Select the intended account/team and project. `.vercel/` local state is gitignored. `.vercelignore` also excludes local environment files, operator scripts, caches and generated output from CLI source uploads. Configure **Preview** variables for an isolated Supabase test project through the Vercel dashboard, then deploy a preview:
 
 ```powershell
-npx --yes vercel@63.1.0 deploy
+npx --yes vercel@63.1.0 deploy --target preview
 ```
 
-The default CLI deployment is a preview. Do not add `--prod` until the launch checks and production configuration below are complete. Vercel deployment protection may require a Vercel login before a visitor can reach the app; review it deliberately for testers. Clients should eventually receive the canonical public production portal URL and authenticate inside DevCare.
+Always specify `--target preview`: Vercel can assign a project's first deployment to Production when the target is omitted, even without `--prod`. Confirm the deployment result says Preview. Do not use `--prod` until the launch checks and production configuration below are complete. Git pushes to the configured production branch can also deploy Production automatically; while preparing the release, disable Git deployments in the Vercel project or use a dedicated release branch as the production branch. Vercel deployment protection may require a Vercel login before a visitor can reach the app; review it deliberately for testers. Clients should eventually receive the canonical public production portal URL and authenticate inside DevCare.
 
 If the default npm cache drive is full, keep both cache and CLI state in ignored workspace folders: `npm exec --cache .verification/npm-cache --yes --package vercel@63.1.0 -- vercel login --global-config .verification/vercel-user`. Use the same `--global-config .verification/vercel-user` option for subsequent `whoami`, `link` and `deploy` commands. This does not delete or change unrelated files. The CLI state contains credentials: keep it ignored and excluded from source uploads.
 

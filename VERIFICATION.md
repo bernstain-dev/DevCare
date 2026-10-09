@@ -54,3 +54,27 @@ Added `vercel.json` with the Vite preset, install/build/output settings, SPA rew
 Typecheck, lint, 32 Vitest tests plus 17 Node tests (49 total), and production build passed again using an ignored workspace-local npm cache. The config also matched the published Vercel schema with meta-schema validation disabled: the published document declares draft-04 but includes newer numeric `exclusiveMinimum` definitions in unrelated function/service branches, which prevented strict meta-schema validation. No hosting-specific browser test or Vercel routing/header check has passed yet. Previous browser/database/API outcomes above remain historical results, not new hosted checks.
 
 The first Vercel CLI installation failed because the default C: npm-cache drive had no free space. Installation in the D: workspace cache succeeded. Vercel CLI 63.1.0 `whoami` returned `Logged out`; there is no linked Vercel project or configured disposable preview Supabase environment. User sign-in and preview-backend selection are pending. No Vercel deployment or production promotion occurred and no Vercel URL is claimed. A workspace-local `--global-config .verification/vercel-user` option is documented to keep CLI state off the full drive; this folder is excluded from Git and uploads.
+
+## Hosted Vercel preview (9 October 2026)
+
+This section supersedes the deployment/sign-in blockers in the preparation entry. The operator signed in successfully and confirmed that real client data will be added later. The existing Supabase project was therefore used only as the current testing backend. Do not add real client data to this preview backend; establish separate production and preview environments before onboarding clients.
+
+Created and linked `devcare` under the authenticated Vercel account and connected `bernstain-dev/DevCare`. Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` were configured, scoped to Preview. Vercel uses Node 24.x. The initial command without an explicit target unexpectedly assigned the first deployment to Production; that deployment (`dpl_FgFqJBXSoYyu9g9NNs294pqrAay8`) was removed successfully. Documentation now requires `--target preview`. The final deployment is **READY, target Preview**, ID `dpl_9JjVdkr7dX5SnbvbX13fENFryLGe`:
+
+**[Verified DevCare preview](https://devcare-28om9dtux-fangonbernstain566-collabs-projects.vercel.app)**
+
+The Vercel build ran `npm ci` and `npm run build` successfully; its install audit reported zero vulnerabilities. Authenticated hosted checks used the CLI-created automation bypass without printing it or committing credentials. Normal visitors still receive a redirect to Vercel sign-in; deployment protection remains enabled.
+
+| Hosted check | Actual result |
+| --- | --- |
+| Direct GET of login, forgot-password, accept-invitation, reset-password, nested project and nested ticket routes | All six returned HTTP 200 with SPA HTML behind Vercel protection |
+| Security headers on those routes | CSP, frame denial, nosniff, referrer policy and permissions policy present |
+| Entry JavaScript asset | HTTP 200, JavaScript content type, correct testing backend/public key; actual operator service key and generated local Vercel OIDC token absent from the inspected entry bundle |
+| Chromium at 1440×1000, 390×844 and 320×740 | Login/auth pages render; no horizontal overflow or page exceptions; unauthenticated nested ticket navigation redirects to login and reload succeeds |
+| Hosted-origin preflight for `admin-users` and `files` | Both HTTP 204 with the exact preview origin |
+| Unauthenticated POST to both functions | Both HTTP 401 |
+| Untrusted-origin preflight to both functions | Both HTTP 403 |
+
+Updated the testing project's Edge Function `SITE_URL` and exact `ALLOWED_ORIGINS`, retaining the two local development origins. Updated ignored operator `DEVCARE_SITE_URL` to this preview origin. No database records, account passwords, invitations or recovery emails were created by these checks. A read-only remote config dry run did not find the preview Auth Site URL or callback URLs; the operator has been given exact dashboard settings to save. Successful SMTP delivery, authenticated hosted admin/client workflows, invitation acceptance and recovery callbacks remain unverified. The full disposable-project integration suite was not run against this backend, which the operator intends to use later for real data.
+
+The account is on Vercel Hobby, which permits personal/non-commercial use. Commercial hosting, production Supabase isolation, Auth callbacks, SMTP and real integration checks remain release requirements. `vercel.json` now disables automatic deployments from `main` so routine source/documentation pushes do not launch an unfinished Production release; other branches can still create previews. The updated config matched the published schema with the same documented meta-schema validation limitation, and `git diff --check` passed. No client-ready Production release is claimed.
