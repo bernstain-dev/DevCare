@@ -22,7 +22,8 @@ jwt_expiry = 3600
 enable_signup = false
 
 [auth.email]
-enable_signup = false
+# Enable email login/invitations; the global auth flag above blocks registration.
+enable_signup = true
 enable_confirmations = true
 double_confirm_changes = true
 

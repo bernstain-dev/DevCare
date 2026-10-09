@@ -20,7 +20,7 @@ Apply all versioned migrations in order. Do not paste only the schema or bypass 
 
 In Supabase Authentication settings:
 
-- Disable **Allow new users to sign up**. Email/password login remains enabled. Invitations and operator-created accounts use Auth Admin API.
+- Disable **Allow new users to sign up**, and keep the **Email provider enabled**. Invitations and operator-created accounts use Auth Admin API. In CLI config, use `[auth].enable_signup = false` together with `[auth.email].enable_signup = true`: the email-specific flag enables the provider, including existing-user logins, despite its name. Verify public `/auth/v1/settings` reports both `disable_signup: true` and `external.email: true`. See [Supabase's provider/signup clarification](https://github.com/supabase/supabase/issues/40582).
 - Set minimum password length to **12**, and enable appropriate password protections available to your project.
 - Set **Site URL** to your canonical frontend origin, e.g. `https://support.example.com` (no path/trailing slash).
 - Add **exact** redirect URLs for `https://support.example.com/accept-invitation` and `https://support.example.com/reset-password`.
