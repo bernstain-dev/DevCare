@@ -194,6 +194,18 @@ Always specify `--target preview`: Vercel can assign a project's first deploymen
 
 If the default npm cache drive is full, keep both cache and CLI state in ignored workspace folders: `npm exec --cache .verification/npm-cache --yes --package vercel@63.1.0 -- vercel login --global-config .verification/vercel-user`. Use the same `--global-config .verification/vercel-user` option for subsequent `whoami`, `link` and `deploy` commands. This does not delete or change unrelated files. The CLI state contains credentials: keep it ignored and excluded from source uploads.
 
+### Current short testing address
+
+The testing portal uses **https://devcare-rho.vercel.app**. `devcare.vercel.app` was unavailable. The short address is a manually assigned alias of the verified Preview deployment, not a Production promotion. Vercel Authentication is enabled for **All Deployments** so this short domain preserves the preview's sign-in requirement. Supabase Auth Site URL, exact invitation/reset callbacks, Edge Function `SITE_URL`/`ALLOWED_ORIGINS`, and ignored operator `DEVCARE_SITE_URL` use this short origin. The previous hosted callbacks/origin remain allowed for existing test links.
+
+After verifying a future Preview deployment, move the short testing address to it explicitly:
+
+```powershell
+npx --yes vercel@63.1.0 alias set YOUR_VERIFIED_PREVIEW.vercel.app devcare-rho.vercel.app --scope fangonbernstain566-collabs-projects
+```
+
+Do not replace the canonical Supabase callback origin with each generated deployment URL. Changing the alias leaves existing browser sessions tied to their original origin; sign in again at the short address when switching. A real client release still requires the production backend and launch checks below; configure public access to its canonical domain deliberately after those checks pass.
+
 ### Connect hosted invitations, recovery and files
 
 After deployment, use the **actual** canonical HTTPS origin in the following settings. `https://YOUR_PORTAL.vercel.app` below is a placeholder, not a claimed deployment:
