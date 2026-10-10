@@ -9,6 +9,9 @@ const projectId = '44444444-4444-4444-8444-444444444444'
 const ticketId = '55555555-5555-4555-8555-555555555555'
 const now = '2026-10-08T08:00:00Z'
 async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn = true) {
+  await page.route('**/maintenance.json', (route) =>
+    route.fulfill({ json: { mode: 'off', title: 'Update', message: 'Update in progress.' } }),
+  )
   const id = role === 'admin' ? adminId : clientId
   const user = {
     id,
@@ -205,6 +208,41 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
   })
   return { ticket }
 }
+test('maintenance stops an already signed-in workspace and preserves its session', async ({
+  page,
+}) => {
+  await portal(page)
+  let mode = 'announcement'
+  await page.route('**/maintenance.json', (route) =>
+    route.fulfill({
+      json: { mode, title: 'Update in progress', message: 'Please check back soon.' },
+    }),
+  )
+  await page.clock.install()
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Hello, Client.' })).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Maintenance announcement' })).toBeVisible()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const banner = document.querySelector('.maintenance-announcement')!.getBoundingClientRect()
+        const sidebar = document.querySelector('.sidebar')!.getBoundingClientRect()
+        return sidebar.top >= banner.bottom - 1
+      }),
+    )
+    .toBe(true)
+  mode = 'maintenance'
+  await page.clock.fastForward(60000)
+  await expect(page.getByRole('heading', { name: 'Update in progress' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Hello, Client.' })).toHaveCount(0)
+  expect(
+    await page.evaluate(() => localStorage.getItem('sb-devcare-test-auth-token')),
+  ).not.toBeNull()
+  mode = 'off'
+  await page.getByRole('button', { name: 'Check again' }).click()
+  await expect(page.getByRole('heading', { name: 'Hello, Client.' })).toBeVisible()
+})
+
 test('failed client invitations keep input and retry only when requested', async ({ page }) => {
   await portal(page, 'admin')
   let attempts = 0

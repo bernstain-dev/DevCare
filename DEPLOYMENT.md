@@ -194,9 +194,27 @@ Always specify `--target preview`: Vercel can assign a project's first deploymen
 
 If the default npm cache drive is full, keep both cache and CLI state in ignored workspace folders: `npm exec --cache .verification/npm-cache --yes --package vercel@63.1.0 -- vercel login --global-config .verification/vercel-user`. Use the same `--global-config .verification/vercel-user` option for subsequent `whoami`, `link` and `deploy` commands. This does not delete or change unrelated files. The CLI state contains credentials: keep it ignored and excluded from source uploads.
 
+### Maintenance announcement and mode
+
+The committed `public/maintenance.json` controls frontend availability. It currently enables maintenance for the update. Change its `mode`, commit, and deploy the reviewed source:
+
+- `announcement`: show the configured `title` and `message` above every portal screen while allowing normal access. Tell users when the update begins and to save their work; use Asia/Manila for any displayed schedule.
+- `maintenance`: replace every route, including sign-in, recovery, invitations and signed-in workspaces, with the maintenance notice. New visits do not initialize Supabase Auth or load the workspace.
+- `off`: restore the portal at the original URL and remove the announcement.
+
+Keep `title` and `message` as nonempty strings. No end time is promised by default. The availability check requests `/maintenance.json` without browser caching; the hosting header also sets `Cache-Control: no-store` ([Vercel cache headers](https://vercel.com/docs/caching/cache-control-headers)). Tabs running this version check every minute and when focused. The **Check again** button retries immediately. Missing, invalid or unreachable status shows an unavailable screen until a successful check. The maintenance query has its own cache so authentication cache resets cannot discard the availability status.
+
+This is a frontend gate, not a database or API write lock. Existing tabs on older frontend versions must reload to receive it, and requests already sent can finish. Unsaved form input is lost when a running workspace enters maintenance, so deploy the announcement before a planned window. Existing stored sessions are retained; recovery/invitation links can expire during a long window. Coordinate any incompatible backend migration separately and enforce a server-side write freeze if the update requires one.
+
+Automatic deployments from `main` remain disabled under the existing release policy. Pushing source alone does not update the current short preview alias: deploy explicitly with `--target preview`, verify it, then move the short alias as described below. Production promotion still requires the launch checks.
+
+For a maintenance-only window, the public domain may temporarily point to a verified Preview deployment with `mode: "maintenance"`, retaining the prior Production deployment for rollback. Keep Preview variables isolated; do not open this Preview portal on a production domain by changing it to `off` or `announcement`. To resume client access, restore the previous verified Production deployment or release an updated Production build with its correct backend and required launch checks.
+
 ### Current short testing address
 
 The testing portal uses **https://devcare-rho.vercel.app**. `devcare.vercel.app` was unavailable. The short address is a manually assigned alias of the verified Preview deployment, not a Production promotion. Vercel Authentication is enabled for **All Deployments** so this short domain preserves the preview's sign-in requirement. Supabase Auth Site URL, exact invitation/reset callbacks, Edge Function `SITE_URL`/`ALLOWED_ORIGINS`, and ignored operator `DEVCARE_SITE_URL` use this short origin. The previous hosted callbacks/origin remain allowed for existing test links.
+
+Live hosting inspection on 11 October 2026 superseded this earlier preview-only state: **https://devcare.tech**, **https://devcare-rho.vercel.app**, and the project's default domain point to READY Production deployment `dpl_GCbRkzqjd27TcyaUKae1GbTs2Z41` (`devcare-pq8j5q8lq-fangonbernstain566-collabs-projects.vercel.app`), and Vercel SSO protection is no longer enabled. This inspection did not verify or change Supabase callbacks, SMTP, migrations, or backend credentials. See the latest maintenance entry in `VERIFICATION.md` for subsequent alias changes.
 
 After verifying a future Preview deployment, move the short testing address to it explicitly:
 
