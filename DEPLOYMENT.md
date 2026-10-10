@@ -216,6 +216,16 @@ The testing portal uses **https://devcare-rho.vercel.app**. `devcare.vercel.app`
 
 Live hosting inspection on 11 October 2026 superseded this earlier preview-only state: **https://devcare.tech**, **https://devcare-rho.vercel.app**, and the project's default domain point to READY Production deployment `dpl_GCbRkzqjd27TcyaUKae1GbTs2Z41` (`devcare-pq8j5q8lq-fangonbernstain566-collabs-projects.vercel.app`), and Vercel SSO protection is no longer enabled. This inspection did not verify or change Supabase callbacks, SMTP, migrations, or backend credentials. See the latest maintenance entry in `VERIFICATION.md` for subsequent alias changes.
 
+The maintenance rollout subsequently moved these three aliases to verified deployment `dpl_DfsdKCzPYNfbgk1mdSxZMnLK2qmg` (`devcare-ppm4nwvh1-fangonbernstain566-collabs-projects.vercel.app`), built from maintenance source commit `daedb5c` with an explicit Preview target. `https://devcare.tech` now serves the public maintenance notice. No Production promotion or backend release occurred. Keep this Preview in `maintenance` on the public domain. To end the window by restoring the retained Production deployment, reassign each alias with:
+
+```powershell
+npx --yes vercel@63.1.0 alias set devcare-pq8j5q8lq-fangonbernstain566-collabs-projects.vercel.app devcare.tech --scope fangonbernstain566-collabs-projects
+npx --yes vercel@63.1.0 alias set devcare-pq8j5q8lq-fangonbernstain566-collabs-projects.vercel.app devcare-rho.vercel.app --scope fangonbernstain566-collabs-projects
+npx --yes vercel@63.1.0 alias set devcare-pq8j5q8lq-fangonbernstain566-collabs-projects.vercel.app devcare-fangonbernstain566-collabs-projects.vercel.app --scope fangonbernstain566-collabs-projects
+```
+
+If the backend changed during maintenance, restore frontend access only after checking compatibility with that backend. To keep this new maintenance capability in the reopened portal, instead build and release the updated source with `mode: "off"` using the intended environment and its release checks.
+
 After verifying a future Preview deployment, move the short testing address to it explicitly:
 
 ```powershell
