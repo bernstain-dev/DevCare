@@ -5,7 +5,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "git": {
-    "deploymentEnabled": { "main": false }
+    "deploymentEnabled": { "main": true }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [

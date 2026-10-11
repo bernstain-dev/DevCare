@@ -1,5 +1,46 @@
 # Verification report
 
+## Maintenance ended and scoped backend released (11 October 2026)
+
+Following the operator's explicit instruction to reopen, changed `public/maintenance.json` to `off` while retaining completion release `2026-10-11.1`. The live backend still lacked the frontend's authorization RPCs, so the reviewed forward-only cutover was completed before opening the frontend. No historical migration was edited, no database reset was performed and no existing Auth user was replaced.
+
+Before cutover, created an encrypted local operator backup containing the original application rows, Auth users/identities, schema authorization metadata and existing private attachment bytes. Backup files, key and operator configuration remain ignored and excluded from deployment source. Deployed the scoped `admin-users` and `files` implementations, applied only `202610110001_scoped_administrators.sql`, then executed the approved administrator assignments atomically: the existing owner account received the newly approved personal business, and the existing friend account was converted and assigned only to the reviewed existing business. Other businesses received no inferred administrator assignments. Original memberships removed during conversion were archived.
+
+Live verification confirmed all seven original Auth rows and their identities remained unchanged, including passwords and invitation state. The original five businesses, unaffected client memberships and existing profile details were preserved; only the approved administrator role/update timestamps changed. Existing projects, tickets, messages, events, attachments, internal notes and notifications were unchanged, and the private file's bytes still match the backup. Read-only authenticated-role database transactions verified each administrator can read only the assigned business, cannot read the other administrator's profile or foreign projects/tickets, and receives a valid scoped access context. These checks created no production test users or test records.
+
+The canonical public origin was missing from the Edge CORS allowlist. Added it while retaining the prior allowed origins, set future invitation callbacks to the canonical site, and updated only Auth site/redirect URL properties while preserving all existing callbacks. Existing signup/provider/SMTP settings were left unchanged; public Auth settings still show signup disabled and email enabled. Both Edge Functions returned 204 for canonical preflight, 401 without authentication and 403 for an untrusted origin. The deployed versions checked after configuration were `admin-users` 7 and `files` 5, both ACTIVE.
+
+Published a clean snapshot based on source commit `7cfd11f`, with the reviewed maintenance-off file, using Production-scoped frontend variables and `--prod --skip-domain`. Verified that the Production backend/key were valid and matched the intended backend, and that upload source contained no inspected operator or OIDC credentials. Remote `npm ci` and build passed with zero reported install vulnerabilities. After hosted checks passed, promotion succeeded for READY Production deployment `dpl_6Ga7wbncHtttacTStrPJ8zbnNGUi` at [its generated deployment URL](https://devcare-5kpn4xoo2-fangonbernstain566-collabs-projects.vercel.app). The custom, short and default domains now all serve this Production build with maintenance off. Vercel inspection of `devcare.tech` confirmed the target is Production and status is Ready.
+
+| Executed check | Actual result |
+| --- | --- |
+| `npm run typecheck` | Passed, exit 0 |
+| `npm run lint` | Passed, exit 0, including the corrected browser fixture |
+| `npm test` | Passed: 44 Vitest and 22 Node tests, 66 total |
+| `npm run build` | Passed, exit 0; normal workspace build restored after browser tests |
+| `npm run test:browser` | Passed: 40 desktop/mobile checks after fixture correction |
+| Remote Production install/build | Passed; zero reported install vulnerabilities |
+| Live preservation and scoped database checks | Passed; original Auth, history, business/profile details and private file verified as described above |
+| Hosted generated/public frontend checks | Passed: eight SPA routes/security headers, sign-in/refresh/protected-route redirects, 1440/390/320 px layouts, no page errors/overflow or automated WCAG violations |
+| Hosted completion notice checks | Passed with controlled browser-local pending release markers: normal/reduced motion, exactly one display and no replay after reload |
+| `git diff --check` | Passed, exit 0 |
+
+The first browser run passed 38 checks and failed two maintenance checks that depended on the deployment file being active. The maintenance fixture now explicitly supplies active maintenance independently of release configuration; the complete rerun passed all 40. An auxiliary watcher intended to span the real domain switch timed out before promotion; it did not establish a seamless transition for already-open tabs. Post-promotion completion checks used explicitly seeded browser-local markers and passed; reload an old tab to fetch the released bundle.
+
+The full disposable `npm run test:integration` suite was not run because no disposable backend is configured. SMTP inbox delivery, password-based sign-in as the real users, and authenticated browser file/reply workflows were not exercised by the hosted smoke checks. The other Supabase project was kept untouched as requested. The actual production changes and read-only checks above are distinguished from the earlier isolated SQL/browser coverage.
+
+Set `git.deploymentEnabled.main: true` to address skipped future pushes now that the frontend/backend cutover is complete. The source includes maintenance off, the independent maintenance browser fixture and updated deployment/verification documentation. The operator subsequently requested committing and pushing these changes; the manually published site was already reopened before that request.
+
+## Latest committed maintenance frontend (11 October 2026)
+
+Confirmed that GitHub `main` contains the user's pushed commit `7cfd11f8bcb698848a5f394123a98ef72214d4ee`. Automatic Vercel builds were skipped because the committed `vercel.json` explicitly sets `git.deploymentEnabled.main` to `false`; the existing deployment list contained no build of this commit. The availability file in the new commit still explicitly selects maintenance.
+
+Published a clean archive of that exact commit manually with `--target preview`, retaining the project's existing Preview environment. The archive was checked for operator/service-role and local Vercel OIDC credentials before upload; none were present. Remote `npm ci` passed with zero reported vulnerabilities, and `npm run build` passed. Vercel confirmed READY Preview deployment `dpl_6VFE3fUUNAw7UcVk7gggURV9ytYc` at [the generated deployment URL](https://devcare-1879xiyc2-fangonbernstain566-collabs-projects.vercel.app).
+
+Before moving aliases, verified eleven SPA routes/security headers and the maintenance screen/reloads at 1440, 390 and 320 px, with no horizontal overflow, browser errors, Supabase requests or automated WCAG violations. Successfully moved `devcare.tech`, `devcare-rho.vercel.app` and the project's default domain to this build. All three return the matching release `2026-10-11.1` with maintenance active and `Cache-Control: no-store`. Repeated the route/layout/browser checks on the public domain successfully; additionally verified the browser records the pending release locally and does not show the completion notice during maintenance.
+
+No Production promotion, live backend migration, assignment, Edge deployment, new repository commit or push occurred. Automatic `main` deployments remain disabled under the release policy. A frontend deployment does not apply Supabase migrations or create the required administrator assignments, and the unresolved disposable integration-backend requirement remains. Local suites were not rerun for this deployment/documentation-only follow-up; the executed remote build and hosted browser checks are reported above.
+
 ## Reopening readiness check (11 October 2026)
 
 Read-only checks confirmed that the public domain still serves maintenance from the READY Preview deployment. The linked Supabase migration history contains the three original migrations, but not `202610110001_scoped_administrators.sql`. The live `access_context` RPC and `platform_operators` table are absent. An out-of-band `admin_client_memberships` table exists with no rows and no `created_at` column, and an out-of-band `can_admin_client` function exists. The table has the expected UUID/boolean columns, composite primary key and foreign keys, and no RLS policies. The identified existing friend Auth/profile account is active and still has the client role. No account, assignment, backend function, migration, frontend deployment or domain alias was changed by this check.

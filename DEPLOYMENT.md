@@ -253,7 +253,7 @@ Check the account's plan before a commercial launch: [Vercel Hobby permits only 
 5. Use separate preview and production Supabase projects and set each variable's Vercel environment scope accordingly. Vite values are embedded during build; changing them requires a redeploy. Keep real client data out of previews.
 6. Deploy and copy the actual assigned HTTPS URL. Do not assume that `devcare.vercel.app` is available or that an arbitrary preview URL is permanent.
 
-The repository currently disables automatic Vercel deployments from `main` through `git.deploymentEnabled.main: false` in `vercel.json`. This keeps documentation/source pushes from releasing an unconfigured Production deployment. Other branches can still create previews. After the production backend, SMTP, callbacks, commercial plan and release checks are ready, enable `main` deliberately for Git-based production releases, or retain manual CLI releases.
+The reopened portal uses a manually verified Production deployment. The repository sets `git.deploymentEnabled.main: true` in `vercel.json` to enable automatic deployments from `main`; the earlier maintenance commit disabled these builds. Use Production frontend variables for Production builds and a separate backend for previews. Backend migrations and Edge deployments are separate from Vercel Git builds; review them before releasing dependent frontend changes.
 
 ### CLI preview
 
@@ -276,7 +276,7 @@ If the default npm cache drive is full, keep both cache and CLI state in ignored
 
 ### Maintenance announcement and mode
 
-The committed `public/maintenance.json` controls frontend availability. It currently enables maintenance for the update. Change its `mode`, commit, and deploy the reviewed source:
+`public/maintenance.json` controls frontend availability. The repository and the live Production deployment use `mode: "off"`, reopening the portal after the update. Change its `mode` and deploy the reviewed source for future maintenance windows:
 
 - `announcement`: show the configured `title` and `message` above every portal screen while allowing normal access. Tell users when the update begins and to save their work; use Asia/Manila for any displayed schedule.
 - `maintenance`: replace every route, including sign-in, recovery, invitations and signed-in workspaces, with the maintenance notice. New visits do not initialize Supabase Auth or load the workspace.
@@ -292,7 +292,7 @@ Only public release identifiers are stored: `devcare:update-pending` records the
 
 This is a frontend gate, not a database or API write lock. Existing tabs on older frontend versions must reload to receive it, and requests already sent can finish. Unsaved form input is lost when a running workspace enters maintenance, so deploy the announcement before a planned window. Existing stored sessions are retained; recovery/invitation links can expire during a long window. Coordinate any incompatible backend migration separately and enforce a server-side write freeze if the update requires one.
 
-Automatic deployments from `main` remain disabled under the existing release policy. Pushing source alone does not update the current short preview alias: deploy explicitly with `--target preview`, verify it, then move the short alias as described below. Production promotion still requires the launch checks.
+With the updated `main: true` configuration, pushes to `main` build Production automatically. The short alias is manually managed and should be verified after promotion. For an isolated Preview, deploy explicitly with `--target preview`, verify it and move only the intended test alias. Production promotion still requires the launch checks.
 
 For a maintenance-only window, the public domain may temporarily point to a verified Preview deployment with `mode: "maintenance"`, retaining the prior Production deployment for rollback. Keep Preview variables isolated; do not open this Preview portal on a production domain by changing it to `off` or `announcement`. To resume client access, restore the previous verified Production deployment or release an updated Production build with its correct backend and required launch checks.
 
@@ -311,6 +311,10 @@ npx --yes vercel@63.1.0 alias set devcare-pq8j5q8lq-fangonbernstain566-collabs-p
 ```
 
 If the backend changed during maintenance, restore frontend access only after checking compatibility with that backend. To keep this new maintenance capability in the reopened portal, instead build and release the updated source with `mode: "off"` using the intended environment and its release checks.
+
+The subsequent maintenance frontend rollout manually published the user's pushed commit `7cfd11f` as READY Preview deployment `dpl_6VFE3fUUNAw7UcVk7gggURV9ytYc` (`devcare-1879xiyc2-fangonbernstain566-collabs-projects.vercel.app`). These same three aliases now point to that newer build. Maintenance remains active with release ID `2026-10-11.1`. A push did not build automatically because `git.deploymentEnabled.main` is still `false`; this manual rollout did not change that release policy or apply pending backend changes. See the latest [verification entry](VERIFICATION.md) for the remote build and hosted checks.
+
+The later reopening supersedes those maintenance alias assignments: all three public aliases now use READY Production deployment `dpl_6Ga7wbncHtttacTStrPJ8zbnNGUi` (`devcare-5kpn4xoo2-fangonbernstain566-collabs-projects.vercel.app`) with maintenance off and the same completion release identifier. Before promotion, the scoped forward migration, updated Edge Functions, reviewed owner/new-business and friend/existing-business assignments, canonical Auth callbacks and Edge origins were applied. Original Auth rows, identities, business records, unaffected client memberships, ticket history and private file bytes were verified unchanged; converted memberships were archived. An encrypted operator backup remains outside source uploads in ignored local verification storage. See [VERIFICATION.md](VERIFICATION.md) for exact checks and unperformed integration/SMTP checks. Older frontend versions may be incompatible with the new private-file response, so do not restore a pre-cutover frontend or global authorization implementation. Reload an old open tab to obtain the reopened build.
 
 After verifying a future Preview deployment, move the short testing address to it explicitly:
 

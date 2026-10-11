@@ -4,6 +4,17 @@ const releaseId = 'test-maintenance-release'
 const shownKey = `devcare:update-complete:${releaseId}`
 
 test('enabled maintenance covers every route without starting Supabase', async ({ page }) => {
+  // Exercise maintenance independently of the current deployment's availability.
+  await page.route('**/maintenance.json', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'maintenance',
+        release_id: releaseId,
+        title: "We're updating DevCare.",
+        message: 'DevCare is temporarily unavailable while we prepare an update.',
+      },
+    }),
+  )
   const backendRequests: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).hostname.endsWith('.supabase.co'))
