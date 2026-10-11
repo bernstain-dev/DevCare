@@ -8,11 +8,16 @@ const accountId = '33333333-3333-4333-8333-333333333333'
 const projectId = '44444444-4444-4444-8444-444444444444'
 const ticketId = '55555555-5555-4555-8555-555555555555'
 const now = '2026-10-08T08:00:00Z'
-async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn = true) {
+async function portal(
+  page: Page,
+  role: 'admin' | 'client' | 'operator' = 'client',
+  signedIn = true,
+) {
   await page.route('**/maintenance.json', (route) =>
     route.fulfill({ json: { mode: 'off', title: 'Update', message: 'Update in progress.' } }),
   )
-  const id = role === 'admin' ? adminId : clientId
+  const administrator = role !== 'client'
+  const id = administrator ? adminId : clientId
   const user = {
     id,
     email: `${role}@example.test`,
@@ -24,8 +29,8 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
   }
   const profile = {
     ...user,
-    display_name: role === 'admin' ? 'Developer' : 'Client User',
-    role,
+    display_name: administrator ? 'Developer' : 'Client User',
+    role: administrator ? 'admin' : 'client',
     active: true,
   }
   const payload = Buffer.from(
@@ -140,6 +145,9 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
       const body = request.postDataJSON()
       const name = path.split('/').pop()
       if (name === 'is_admin') return reply(role === 'admin')
+      if (name === 'access_context')
+        return reply({ operator: role === 'operator', scope: `${id}:${role}` })
+      if (name === 'is_platform_operator') return reply(role === 'operator')
       if (name === 'is_active_user') return reply(true)
       if (name === 'create_ticket') {
         Object.assign(ticket, {
@@ -183,6 +191,9 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
     if (table === 'profiles') rows = [profile]
     if (table === 'clients') rows = [client]
     if (table === 'client_memberships') rows = []
+    if (table === 'admin_client_memberships') rows = []
+    if (table === 'platform_operators')
+      rows = role === 'operator' ? [{ user_id: adminId, active: true }] : []
     if (table === 'projects') rows = [project]
     if (table === 'tickets') rows = [ticket]
     if (table === 'ticket_messages') rows = messages
@@ -208,6 +219,31 @@ async function portal(page: Page, role: 'admin' | 'client' = 'client', signedIn 
   })
   return { ticket }
 }
+test('scoped administrators cannot open operator management', async ({ page }) => {
+  await portal(page, 'admin')
+  await page.goto('/administrators')
+  await expect(page.getByRole('heading', { name: 'Hello, Developer.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Administrator Management' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Administrators', exact: true })).toHaveCount(0)
+})
+
+test('trusted operators can open accessible administrator controls', async ({ page }) => {
+  await portal(page, 'operator')
+  await page.goto('/administrators')
+  await expect(page.getByRole('heading', { name: 'Administrator Management' })).toBeVisible()
+  await expect(page.getByLabel('Operation')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Convert Existing Account' })).toBeVisible()
+  await page.getByLabel('Operation').selectOption('invite')
+  await expect(page.getByLabel('Administrator email')).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Invite Administrator', exact: true }),
+  ).toBeVisible()
+  expect(
+    (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
+      .violations,
+  ).toEqual([])
+})
+
 test('maintenance stops an already signed-in workspace and preserves its session', async ({
   page,
 }) => {

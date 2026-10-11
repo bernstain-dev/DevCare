@@ -16,7 +16,7 @@ npx --yes supabase@2.120.0 link --project-ref YOUR_PROJECT_REF
 npx --yes supabase@2.120.0 db push
 ```
 
-Apply all versioned migrations in order. Do not paste only the schema or bypass RLS policies. On a disposable local stack use `npx --yes supabase@2.120.0 db reset`; **never reset production**. Migrations create ten RLS-protected application tables and a private `ticket-attachments` bucket. SQL sequence generation is concurrency-safe; gaps are expected after rolled-back transactions. UUIDs remain primary keys.
+Apply all versioned migrations in order. Do not paste only the schema or bypass RLS policies. On a disposable local stack use `npx --yes supabase@2.120.0 db reset`; **never reset production**. Migrations create twelve RLS-protected public tables, private operator audit/archive tables and a private `ticket-attachments` bucket. SQL sequence generation is concurrency-safe; gaps are expected after rolled-back transactions. UUIDs remain primary keys. Existing installations must apply the new forward-only `202610110001_scoped_administrators.sql` migration and complete the explicit assignments below; earlier applied migrations remain unchanged.
 
 In Supabase Authentication settings:
 
@@ -67,7 +67,7 @@ npx --yes supabase@2.120.0 functions deploy admin-users --no-verify-jwt
 npx --yes supabase@2.120.0 functions deploy files --no-verify-jwt
 ```
 
-`ALLOWED_ORIGINS` accepts an exact comma-separated list, without trailing slashes. Use a development project/origin for localhost and previews. `SITE_URL` determines invitation callbacks and cannot be supplied by the browser. The functions manually verify every bearer token with `auth.getUser`, check current profile activity and RLS/RPC access, and only then create an elevated client. `admin-users` also checks active admin permission. `files` checks admin permission for cleanup and ticket/attachment access for upload/download. Disabling gateway JWT verification is intentional for publishable-key compatibility; it does **not** make these endpoints anonymous.
+`ALLOWED_ORIGINS` accepts an exact comma-separated list, without trailing slashes. Use a development project/origin for localhost and previews. `SITE_URL` determines invitation callbacks and cannot be supplied by the browser. The functions manually verify every bearer token with `auth.getUser`, check current profile activity and RLS/RPC access, and only then create an elevated client. `admin-users` checks the caller's assigned client for ordinary invitations; administrator invitation/conversion requires an explicit active platform operator and an operator RPC. `files` checks ticket/attachment scope for uploads/downloads and assigned client scope for cleanup. Cleanup across accounts requires an explicit platform operator. Disabling gateway JWT verification is intentional for publishable-key compatibility; it does **not** make these endpoints anonymous.
 
 Do not send server keys in Vite variables, browser requests, GitHub source or logs. If you set CLI secrets from a file, use an ignored backend-only file. SMTP passwords belong in Supabase SMTP settings, not frontend configuration.
 
@@ -78,10 +78,10 @@ Only an operator with the Supabase service-role key or trusted SQL editor access
 1. Complete migrations, SMTP, templates, callbacks and function deployment first.
 2. Copy `.env.admin.example` to ignored `.env.admin` on your trusted computer. Set the backend URL/service-role key, your email as `DEVCARE_ADMIN_EMAIL`, and canonical origin as `DEVCARE_SITE_URL`.
 3. Run `npm run bootstrap:admin`.
-4. Open the invitation email at `/accept-invitation`, set a unique password of at least 12 characters, and verify your developer dashboard.
+4. Open the invitation email at `/accept-invitation` and set a unique password of at least 12 characters. Complete the explicit client assignment below before verifying your developer dashboard. Bootstrap grants no client data access by itself.
 5. Remove the local operator env file when finished. Protect the service key in your secret manager; rotate it if exposed.
 
-Rerunning bootstrap for the same active admin reports that the account is ready and sends no email. It refuses to create another admin or reactivate a disabled admin. If an invitation was created but role promotion failed, rerun after fixing the problem; the script finds the existing profile. For an existing invited account without a valid link, use password recovery after confirming the account's email ownership.
+Rerunning bootstrap for the same active admin sends no email and does not change assignments. It refuses to create another admin or reactivate a disabled admin. If an invitation was created but role promotion failed, rerun after fixing the problem; the script finds the existing profile. For an existing invited account without a valid link, use password recovery after confirming the account's email ownership.
 
 ### Invitation or admin login troubleshooting
 
@@ -105,16 +105,96 @@ npm run recover:admin
 
 Run this from the repository in your own interactive terminal with the ignored `.env.admin` configured as above. Enter your chosen password twice at the hidden prompts, then sign in normally with `DEVCARE_ADMIN_EMAIL`. No characters appear while typing. Do not put the password in chat, command arguments, environment variables or files. This command uses the server-only Auth Admin API; it checks the existing profile's admin role/activity and the matching confirmed Auth user before accepting the password. It cannot create accounts, confirm email addresses, grant roles or enable disabled users. It refuses piped/noninteractive input and does not print passwords, keys, Auth responses or recovery links. Protect/remove `.env.admin` afterward. Custom SMTP remains required before client onboarding.
 
-Operator recovery: first use the Supabase dashboard to invite/identify your verified Auth user, then execute the following in the **trusted SQL editor**, substituting that known Auth UUID. Never expose this operation as a public RPC:
+Operator recovery requires identifying the existing verified Auth/profile account and using the explicit assignment flow below. Changing `profiles.role` alone grants no client access. Disabled accounts require a deliberate trusted operator review before reactivation. There are no hardcoded production credentials.
 
-```sql
-begin;
-update public.profiles set role = 'admin', active = true
-where id = 'YOUR_VERIFIED_AUTH_USER_UUID';
-commit;
-```
+### Scoped administrator cutover and existing-account conversion
 
-Review existing administrators before promoting a replacement and revoke access for any compromised operator. The UI intentionally cannot create additional administrator roles or alter admin permissions. There are no hardcoded production credentials.
+`profiles.role = 'admin'` now identifies a role only. Client data access requires an active `admin_client_memberships` row, an active profile and an active client on every request. The migration assigns nobody automatically. Existing records, ticket history and Auth identities remain intact. Only a server-side service-role operator or a separately enrolled platform operator can convert administrators or change their assignments. Ordinary administrators cannot assign themselves to an existing account, promote users, manage another administrator, or use client memberships to bypass their scope.
+
+Before releasing, back up database and private Storage, review this migration on a disposable project, and keep the portal in maintenance. Deploy the updated Edge Functions during that window before applying the migration: they fail closed until their scoped RPCs exist, which prevents the previous global cleanup/invitation implementation from running after cutover. Apply pending migrations with `db push`, never reset or replay edited historical migrations. Complete assignments and verify the new frontend/functions together before reopening. Do not roll back to the old global authorization functions.
+
+The unapplied cutover also accepts a compatible operator-created `admin_client_memberships` table and existing `can_admin_client(uuid)` function. It validates required UUID/boolean columns, primary/foreign keys and absence of pre-existing policies, preserves membership rows, adds the missing timestamp and replaces the helper with the reviewed scoped implementation. An incompatible structure fails inside the transaction for operator review. A timestamp added to a legacy row records its adoption by this release, not an inferred historical creation date. Run `npm run test:database` both normally and with `DEVCARE_TEST_PARTIAL_ADMIN_SCHEMA=1` to verify the fresh and partial-schema paths in isolated temporary databases; do not run these fixture scripts against production.
+
+1. Identify both existing Auth/profile accounts in the trusted Supabase dashboard or SQL editor. The following is a read-only lookup; replace placeholders locally and keep results out of commits and logs. Confirm the UUID, email ownership, profile activity and accepted invitation state. Do not invite the friend again or create a second account.
+
+   ```sql
+   select u.id, u.email, u.email_confirmed_at, u.invited_at, p.role, p.active
+   from auth.users u join public.profiles p on p.id = u.id
+   where lower(u.email) in (lower('OWNER_EMAIL_PLACEHOLDER'), lower('FRIEND_EMAIL_PLACEHOLDER'));
+   -- Alternatively identify an already known account by its UUID:
+   select u.id, u.email, p.role, p.active
+   from auth.users u join public.profiles p on p.id = u.id
+   where u.id = 'EXISTING_AUTH_USER_UUID_PLACEHOLDER'::uuid;
+   ```
+
+2. Identify the friend's personal business and your own business by reviewing existing records. Do not infer ownership from creation order, contact email, or the previous global admin role. Existing client memberships help review the friend's account, but multiple results require an explicit operator decision.
+
+   ```sql
+   select c.id, c.name, c.active, m.active as membership_active
+   from public.client_memberships m join public.clients c on c.id = m.client_id
+   where m.user_id = 'FRIEND_AUTH_USER_UUID_PLACEHOLDER'::uuid;
+   select id, name, active from public.clients order by created_at;
+   ```
+
+3. Configure the ignored `.env.admin` on a trusted operator computer with its backend URL/service-role key. Set the existing first administrator and reviewed own client explicitly:
+
+   ```dotenv
+   DEVCARE_OPERATOR_ACTION=configure
+   DEVCARE_TARGET_USER_ID=OWNER_AUTH_USER_UUID_PLACEHOLDER
+   DEVCARE_TARGET_CLIENT_ID=OWNER_CLIENT_UUID_PLACEHOLDER
+   ```
+
+   ```powershell
+   node --env-file=.env.admin scripts/scoped-admin.mjs
+   ```
+
+   `DEVCARE_TARGET_EMAIL=EXISTING_EMAIL_PLACEHOLDER` can replace `DEVCARE_TARGET_USER_ID` for an existing account lookup; prefer the verified UUID. When both are supplied, they must identify the same account. The script verifies the existing Auth/profile match and performs no Auth creation, invitation, password or confirmation changes.
+
+4. Run the same command after changing only the secure target configuration to the existing friend account and its reviewed personal business:
+
+   ```dotenv
+   DEVCARE_OPERATOR_ACTION=configure
+   DEVCARE_TARGET_USER_ID=FRIEND_AUTH_USER_UUID_PLACEHOLDER
+   DEVCARE_TARGET_CLIENT_ID=FRIEND_PERSONAL_CLIENT_UUID_PLACEHOLDER
+   ```
+
+   The atomic `configure_administrator` RPC preserves that Auth user and invitation/password state, changes the existing profile to `admin`, archives its previous client membership rows in `private.retired_client_memberships`, removes only those archived rows from the active client membership table, and creates exactly one active administrator assignment. Other administrator assignments for that target become inactive. Rerunning the same conversion is safe. The friend's target must differ from the owner's client. Do not enroll either business administrator as a platform operator.
+
+5. Review both results with trusted, read-only queries, then test each account using its own normal login and publishable key:
+
+   ```sql
+   select p.id, p.role, p.active, m.client_id, m.active as assignment_active
+   from public.profiles p left join public.admin_client_memberships m on m.user_id = p.id
+   where p.id in ('OWNER_AUTH_USER_UUID_PLACEHOLDER'::uuid, 'FRIEND_AUTH_USER_UUID_PLACEHOLDER'::uuid);
+   select user_id, client_id, active from public.client_memberships
+   where user_id = 'FRIEND_AUTH_USER_UUID_PLACEHOLDER'::uuid;
+   select id, email, email_confirmed_at, invited_at from auth.users
+   where id = 'FRIEND_AUTH_USER_UUID_PLACEHOLDER'::uuid;
+   ```
+
+   Each administrator should see only the explicitly assigned business, projects, tickets, replies, events, files, notifications and internal notes. Direct foreign UUID reads return no rows; foreign status/priority/reply/note/upload/download attempts fail. Verify the friend's original password still works and no duplicate Auth account exists. With a trusted operator, temporarily remove an assignment and verify a previously issued session immediately loses database and file access; restore only its reviewed business. Also verify disabled profiles/clients and ordinary client-user memberships on disposable fixtures. Existing historical notifications for another business remain stored but become invisible.
+
+6. Inventory accounts without an administrator and assign them only after an ownership review:
+
+   ```sql
+   select c.id, c.name, c.active from public.clients c
+   where not exists (
+     select 1 from public.admin_client_memberships m join public.profiles p on p.id = m.user_id
+     where m.client_id = c.id and m.active and p.active and p.role = 'admin'
+   );
+   ```
+
+   Use `DEVCARE_OPERATOR_ACTION=assign` or `remove` with explicit existing administrator and client UUIDs, then run the operator command. These actions change assignment activity without promoting users or deleting history. An administrator with no active assignment cannot create a business; the trusted operator can create/review one and assign it first. An ordinary administrator who creates a new business receives only that new business's assignment. Disabling a business removes ordinary administrator access immediately; its restoration requires a trusted platform operator.
+
+### Optional platform operator and administrator management UI
+
+The server-side operator script is sufficient for the two business administrators. If browser management is needed, invite and verify a **separate operational account** using trusted Auth administration. Leave it unassigned to client/business accounts. In the ignored operator configuration set `DEVCARE_OPERATOR_ACTION=grant-operator` and its explicit `DEVCARE_TARGET_USER_ID`; run the same script. This service-role-only action records an explicit `platform_operators` entry. Existing administrators are never enrolled implicitly.
+
+That account alone sees **Administrators** in navigation. It can invite a new administrator with an explicit business, convert an existing client profile by UUID, assign/remove administrator memberships, and disable/enable administrators. Administrator invitation reuses an existing matching Auth account when present. Accepted accounts receive no new invitation. Ordinary **Manage Users** invitations remain client-only and require ownership of the selected business; an existing user assigned outside the caller's scope cannot be claimed.
+
+Platform operators can read account/profile/assignment metadata needed for these controls; they do not receive global ticket, message, attachment, notification or internal-note access. Treat their ability to manage grants as privileged. Grant/revoke the operator designation only through the server-side script (`revoke-operator`), never browser input. Revocation also works for a disabled operator profile. Protect/remove `.env.admin` afterward; service-role credentials never belong in `VITE_` variables. Assignment/conversion changes are recorded in `private.admin_access_events`.
+
+`npm run test:database` checks the actual SQL in a temporary PostgreSQL cluster, including old-migration data preservation and conversion identity. `npm run test:integration` additionally checks real Supabase Auth, Storage and Edge Functions and requires a configured disposable `.env.test`. Do not run it against the live client project. Release still requires passing integration/security checks, correct backend/frontend environments, configured SMTP/callbacks and hosted smoke testing.
 
 ## 6. GitHub source control
 
@@ -204,6 +284,12 @@ The committed `public/maintenance.json` controls frontend availability. It curre
 
 Keep `title` and `message` as nonempty strings. No end time is promised by default. The availability check requests `/maintenance.json` without browser caching; the hosting header also sets `Cache-Control: no-store` ([Vercel cache headers](https://vercel.com/docs/caching/cache-control-headers)). Tabs running this version check every minute and when focused. The **Check again** button retries immediately. Missing, invalid or unreachable status shows an unavailable screen until a successful check. The maintenance query has its own cache so authentication cache resets cannot discard the availability status.
 
+After a browser observes `maintenance`, it can show one **Update complete** notice when the matching release becomes `off` and the portal bundle has loaded. Ordinary visits/refreshes without that maintenance visit show nothing. The notice uses a short CSS animation, a polite accessible message, a dismiss button and a ten-second timeout; reduced-motion preferences show the same message without animation. It never blocks navigation or changes authentication.
+
+Use `VITE_APP_RELEASE_ID` at build time, or update `DEFAULT_UPDATE_RELEASE_ID` in `src/lib/updateComplete.ts`. The current fallback is `2026-10-11.1`; use a new stable identifier for each maintenance release (1–80 letters/digits/dots/underscores/hyphens, beginning with a letter or digit). Set `public/maintenance.json`'s `release_id` to that same **target** identifier when entering maintenance, and keep it when switching to `off`. This lets the old maintenance page record the upcoming release, while preventing an old cached bundle from celebrating an update it has not loaded. A stale tab must reload the matching build before it can show the notice; availability routing itself remains unchanged. A version change alone does not trigger the notice.
+
+Only public release identifiers are stored: `devcare:update-pending` records the observed maintenance release; `devcare:update-complete:<release-id>` stores that release ID immediately before the committed notice is painted. Refreshes, repeat maintenance checks and duplicate React renders cannot replay a recorded release. The pending marker is removed after a successful claim. If browser storage is unavailable or cannot persist the shown marker, the notice is skipped and the portal continues normally. There are no database writes, cookies or server-side completion records. Clearing browser storage can permit a future maintenance visit to show the notice again.
+
 This is a frontend gate, not a database or API write lock. Existing tabs on older frontend versions must reload to receive it, and requests already sent can finish. Unsaved form input is lost when a running workspace enters maintenance, so deploy the announcement before a planned window. Existing stored sessions are retained; recovery/invitation links can expire during a long window. Coordinate any incompatible backend migration separately and enforce a server-side write freeze if the update requires one.
 
 Automatic deployments from `main` remain disabled under the existing release policy. Pushing source alone does not update the current short preview alias: deploy explicitly with `--target preview`, verify it, then move the short alias as described below. Production promotion still requires the launch checks.
@@ -256,9 +342,9 @@ After these checks and all release requirements pass, promote the verified deplo
 
 PNG, JPEG, WebP and PDF only; 5 MiB each; maximum three per original ticket or public reply. The frontend checks names/types/size, the Edge Function validates extension and file signature, PostgreSQL reserves slots under a ticket row lock, and the private bucket limits types/bytes. File-signature checks establish format, not malware scanning; PDFs are forced to download and never rendered in the portal. Only authors may attach files to their own report/reply. Internal notes have no attachment surface. No Storage policies give browser users direct bucket access.
 
-Signed links last **60 seconds**. Treat them as short-lived bearer links: anyone holding one may use it until it expires, including briefly after access revocation. New links/uploads and all database access immediately recheck current access. The portal stores object paths, never signed links.
+Downloads return authenticated file bytes through the Edge Function, with a second live attachment-scope check before returning bytes and `Cache-Control: no-store`. The frontend creates a temporary local Blob URL and revokes it after download; new reusable Storage bearer links are never issued. Profile, membership and business revocation apply to subsequent downloads using existing sessions. Already downloaded bytes cannot be recalled. Previously issued signed links from the old function remain usable until their old expiration; allow their previous 60-second lifetime to pass during the cutover window. The bucket remains private, with no browser write policies.
 
-If one file fails, the report/reply remains saved and only unsuccessful files are offered for retry. Failed reservations are removed after storage cleanup succeeds. Cleanup atomically claims rows as `deleting` before touching Storage; it preserves finalized files and retains failed removals for retry. After a crash or lost response, use Profile & Settings → **Clean Abandoned Uploads** daily; it processes pending reservations older than 24 hours and retries incomplete removals, up to 100 at a time. Repeat until no batch remains. The endpoint checks an active admin session. A scheduled operator can call `files` with `{ "action": "cleanup" }` and a valid admin bearer token; do not use an unprotected cron secret or service key in the browser. A failure to finalize cannot expose a pending file.
+If one file fails, the report/reply remains saved and only unsuccessful files are offered for retry. Failed reservations are removed after storage cleanup succeeds. Cleanup atomically claims rows as `deleting` before touching Storage; it preserves finalized files and retains failed removals for retry. After a crash or lost response, use Profile & Settings → **Clean Abandoned Uploads** daily; it processes pending reservations older than 24 hours and retries incomplete removals, up to 100 at a time. Repeat until no batch remains. Ordinary administrators must select their assigned account and send `{ "action": "cleanup", "client_id": "ASSIGNED_CLIENT_UUID_PLACEHOLDER" }`; every claimed row is scoped. Only an explicit active platform operator may omit `client_id` to clean across accounts, using that operator's authenticated bearer token. Do not use an unprotected cron secret or service key in the browser. A failure to finalize cannot expose a pending file.
 
 ## 9. Database and attachment backup/restore
 

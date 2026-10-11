@@ -25,6 +25,7 @@ const Notifications = lazy(() =>
   import('./pages/Account').then((m) => ({ default: m.Notifications })),
 )
 const Settings = lazy(() => import('./pages/Account').then((m) => ({ default: m.Settings })))
+const Administrators = lazy(() => import('./pages/Administrators'))
 
 function Guard() {
   const { session, profile, loading, error, refresh, logout } = useAuth()
@@ -58,6 +59,10 @@ function AdminOnly() {
   const { profile } = useAuth()
   return profile?.role === 'admin' ? <Clients /> : <Navigate to="/" replace />
 }
+function OperatorOnly() {
+  const { operator } = useAuth()
+  return operator ? <Administrators /> : <Navigate to="/" replace />
+}
 export function App() {
   return (
     <>
@@ -76,6 +81,7 @@ export function App() {
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectDetails />} />
             <Route path="clients" element={<AdminOnly />} />
+            <Route path="administrators" element={<OperatorOnly />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="tickets/new" element={<SubmitTicket />} />
             <Route path="tickets/:id" element={<TicketDetails />} />

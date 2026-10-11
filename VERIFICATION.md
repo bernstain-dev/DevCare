@@ -1,5 +1,59 @@
 # Verification report
 
+## Reopening readiness check (11 October 2026)
+
+Read-only checks confirmed that the public domain still serves maintenance from the READY Preview deployment. The linked Supabase migration history contains the three original migrations, but not `202610110001_scoped_administrators.sql`. The live `access_context` RPC and `platform_operators` table are absent. An out-of-band `admin_client_memberships` table exists with no rows and no `created_at` column, and an out-of-band `can_admin_client` function exists. The table has the expected UUID/boolean columns, composite primary key and foreign keys, and no RLS policies. The identified existing friend Auth/profile account is active and still has the client role. No account, assignment, backend function, migration, frontend deployment or domain alias was changed by this check.
+
+Updated only the unapplied forward migration to accept this compatible partial schema, preserve its records, add its required timestamp and replace the scoped helper. Incompatible structures fail transactionally before cutover. Added temporary-database coverage of a nonempty partial schema and rejection/rollback of an incompatible schema. Historical migrations were not edited. The operator confirmed a new personal workspace for the existing owner account and the reviewed existing business for the friend. Explicit atomic assignment SQL was prepared in ignored operator files, without executing it or changing Auth identities/passwords. Other existing businesses are not assigned by inference.
+
+| Executed check | Actual result |
+| --- | --- |
+| `npm run typecheck` | Passed, exit 0 |
+| `npm run lint` | Passed, exit 0 |
+| `npm test` | Passed: 44 Vitest and 22 Node tests, 66 total |
+| `npm run build` | Passed, exit 0 |
+| `npm run test:database` | Passed: 245 isolated PostgreSQL checks on a fresh schema |
+| `$env:DEVCARE_TEST_PARTIAL_ADMIN_SCHEMA = '1'; npm run test:database` | Passed: 247 isolated PostgreSQL checks, including partial-schema preservation and incompatible-schema rollback |
+| `git diff --check` | Passed, exit 0 |
+
+Browser checks were not repeated for this SQL/operator-preparation follow-up; the previous 40-check frontend result remains recorded below. Real `npm run test:integration` was not run: no disposable environment is configured and Docker is unavailable locally. The operator explicitly required the other existing Supabase project to remain untouched; it was neither repurposed nor queried for application data. Reopening the updated portal remains pending a separate disposable integration backend, required release checks and a verified release using the intended backend. Restoring the older frontend would not deliver the new isolation or update-completion feature. Maintenance remains enabled. No commit or push was performed.
+
+## One-time update completion notice (11 October 2026)
+
+Added only frontend completion behavior, browser-local release markers, configuration/documentation and tests in this follow-up. Existing maintenance modes, authentication and backend data operations were preserved; no migrations, production records, server storage or cookies were changed. No commit, push or deployment was performed.
+
+| Executed check         | Actual result                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `npm run typecheck`    | Passed, exit 0                                                                             |
+| `npm run lint`         | Passed, exit 0                                                                             |
+| `npm test`             | Passed: 44 Vitest tests in 5 files and 22 Node tests, 66 total                             |
+| `npm run build`        | Passed, exit 0                                                                             |
+| `npm run test:browser` | Passed: 40 desktop/mobile checks against the built application with test-only API fixtures |
+
+New tests cover a recorded maintenance window followed by completion, suppression after reload even before dismissal, separate release identifiers, ordinary visits and refreshes, invalid/blocked/read-only storage, mismatched stale bundles, duplicate render/claim prevention, close and timeout behavior, focus retention, reduced motion and automated WCAG checks. The final build regenerates `dist` with the workspace's normal environment after browser tests used isolated frontend test configuration. Backend/database/hosted integration tests were not rerun for this frontend-only follow-up.
+
+## Scoped administrator isolation (11 October 2026)
+
+Implemented locally without committing, pushing, deploying, changing live accounts or applying migrations to a hosted project. Existing historical migrations were left unchanged. Pre-existing package/lockfile changes were preserved.
+
+| Executed check          | Actual result                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `npm ci`                | Passed; 229 packages installed, zero reported vulnerabilities                                |
+| `npm run typecheck`     | Passed, exit 0                                                                               |
+| `npm run lint`          | Passed, exit 0                                                                               |
+| `npm test`              | Passed: 34 Vitest tests and 22 Node operator tests, 56 total                                 |
+| `npm run test:database` | Passed: 244 checks in an isolated temporary PostgreSQL cluster                               |
+| `npm run test:browser`  | Passed: 28 desktop/mobile checks against the built application with test-only API fixtures   |
+| `npm run build`         | Passed, exit 0                                                                               |
+| Deno check              | Passed for `supabase/functions/admin-users/index.ts` and `supabase/functions/files/index.ts` |
+| `git diff --check`      | Passed                                                                                       |
+
+The database suite seeds legacy records before applying the new forward-only migration and verifies every original table remains unchanged. It tests separate admin A/B assignments, all related read boundaries, foreign RPC failures, profile/assignment/client revocation with existing sessions, operator-only membership management, notification isolation, scoped attachment claims, conversion without changes to the existing Auth row or duplicate accounts, and concurrent conversion/user-management safety. Conversion archives old client memberships before narrowly removing them from the active table.
+
+Initial browser runs against the development server encountered cold-module/request stalls. The browser harness now builds and serves the production bundle with an isolated test backend configuration; all 28 original and new assertions then passed. Browser fixtures do not establish real Supabase Auth, Edge or Storage behavior. Build output and test artifacts remain ignored.
+
+`npm run test:integration` was **not run** because no disposable `.env.test` is configured. The extended guarded suite includes actual Supabase Auth conversion/password preservation and cross-admin Edge upload/download checks. SMTP, hosted callbacks, actual account conversion/assignment and production release remain unverified. Use the placeholder-only operator procedure in [DEPLOYMENT.md](DEPLOYMENT.md#scoped-administrator-cutover-and-existing-account-conversion); never run disposable integration checks against the live client project.
+
 Executed locally on **8 October 2026**, using Node 24.15.0 on Windows. No external credentials, real client records or production passwords were provided.
 
 | Check                                         | Actual result                                                                                                                                      |

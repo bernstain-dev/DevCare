@@ -5,9 +5,10 @@ A working, invitation-only support portal for a freelance developer and their cl
 ## Features
 
 - Developer and client dashboards, project lists and details, client accounts and memberships, invitation management, and account disabling.
+- Administrators see only explicitly assigned businesses and their related data. A separate trusted operator manages administrator conversions and assignments; existing Auth accounts are preserved.
 - Ticket submission with four request types, reproduction context, requested urgency separate from admin priority, database-generated references, searchable filters and pagination.
 - Backend-enforced ticket transitions, resolution summaries, client confirmation/reopening, public replies, separate private notes, immutable authors and audit history.
-- Private attachments, byte/type/count limits, authenticated upload/download, 60-second download links, partial-failure retry, and abandoned-upload cleanup.
+- Private attachments, byte/type/count limits, authenticated byte downloads with current access checks, partial-failure retry, and cleanup limited to assigned businesses.
 - In-app notifications, profile editing, login/logout, invitation acceptance, password recovery, accessible responsive navigation, and Manila timestamp display.
 
 ## Local setup
@@ -22,6 +23,8 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173`. Complete the backend instructions in [DEPLOYMENT.md](DEPLOYMENT.md) first; [the Vercel section](DEPLOYMENT.md#7a-vercel-deployment) covers Vercel Git/CLI deployment and hosted invitation callbacks. For local Supabase:
+
+Existing environments must apply the forward-only scoped-administrator migration and follow the [explicit account conversion and assignment procedure](DEPLOYMENT.md#scoped-administrator-cutover-and-existing-account-conversion). It grants no guessed ownership; administrator accounts need a reviewed business assignment before seeing data.
 
 ```powershell
 npx --yes supabase@2.120.0 start
@@ -53,7 +56,7 @@ npm run test:database
 
 `test:database` requires PostgreSQL binaries. On this Windows workspace it defaults to `C:/Program Files/PostgreSQL/18/bin`; override `POSTGRES_BIN` on other systems. It starts and stops its own temporary, loopback-only database, applies all migrations, and checks real SQL/RLS/concurrency. It does not touch existing PostgreSQL services or databases. Its minimal Auth/Storage schemas are test contracts, so it cannot verify Supabase Auth or Storage HTTP behavior.
 
-Browser tests use explicit API fixtures **only in the test suite** to exercise screens, mobile navigation, form validation, workflows, direct-route refresh and attachment retries. They do not establish hosted backend or SMTP success. Production code always connects to Supabase.
+Browser tests build and serve a local production bundle with an isolated test backend configuration, using explicit API fixtures **only in the test suite** to exercise screens, mobile navigation, form validation, workflows, direct-route refresh and attachment retries. They do not establish hosted backend or SMTP success. Production code always connects to Supabase. Run `npm run build` afterward to regenerate `dist` with your intended environment before any release.
 
 For the real Supabase API integration suite:
 

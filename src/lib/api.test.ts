@@ -1,7 +1,40 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const invoke = vi.hoisted(() => vi.fn())
 vi.mock('./supabase', () => ({ supabase: { functions: { invoke } } }))
-import { uploadFiles } from './api'
+import { downloadAttachment, uploadFiles } from './api'
+import type { Attachment } from './types'
+
+describe('authenticated attachment downloads', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+  it('downloads authenticated bytes and revokes the local URL', async () => {
+    vi.useFakeTimers()
+    const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-download')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const anchor = { href: '', rel: '', download: '', click: vi.fn(), remove: vi.fn() }
+    vi.stubGlobal('document', { createElement: () => anchor, body: { appendChild: vi.fn() } })
+    const bytes = new Blob(['private bytes'])
+    invoke.mockResolvedValueOnce({ data: bytes, error: null })
+    await downloadAttachment({ id: 'attachment', file_name: 'report.pdf' } as Attachment)
+    expect(create).toHaveBeenCalledWith(bytes)
+    expect(anchor.download).toBe('report.pdf')
+    expect(anchor.click).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(revoke).toHaveBeenCalledWith('blob:local-download')
+  })
+  it('rejects legacy URL responses instead of bypassing current authorization', async () => {
+    invoke.mockResolvedValueOnce({
+      data: { url: 'https://storage.example.test/old-signed-url' },
+      error: null,
+    })
+    await expect(
+      downloadAttachment({ id: 'attachment', file_name: 'report.pdf' } as Attachment),
+    ).rejects.toThrow('Download unavailable')
+  })
+})
 describe('partial upload failure recovery', () => {
   beforeEach(() => invoke.mockReset())
   it('keeps only failed files for retry and does not resend successful files', async () => {

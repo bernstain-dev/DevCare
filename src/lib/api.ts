@@ -44,10 +44,12 @@ export async function uploadFiles(
   return { failed, errors }
 }
 export async function downloadAttachment(file: Attachment) {
-  const { url } = await edge<{ url: string }>('files', {
+  const bytes = await edge<Blob>('files', {
     action: 'download',
     attachment_id: file.id,
   })
+  if (!(bytes instanceof Blob)) throw new Error('Download unavailable. Please try again.')
+  const url = URL.createObjectURL(bytes)
   const a = document.createElement('a')
   a.href = url
   a.rel = 'noopener noreferrer'
@@ -55,6 +57,7 @@ export async function downloadAttachment(file: Attachment) {
   document.body.appendChild(a)
   a.click()
   a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 export async function createTicket(values: Record<string, unknown>): Promise<Ticket> {
   return rpc<Ticket>('create_ticket', {

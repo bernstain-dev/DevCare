@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useClients } from '../lib/queries'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -132,7 +133,9 @@ export function Notifications() {
 }
 const profileSchema = z.object({ display_name: z.string().trim().min(1).max(120) })
 export function Settings() {
-  const { profile, refresh } = useAuth()
+  const { profile, operator, refresh } = useAuth()
+  const clients = useClients()
+  const [cleanupClient, setCleanupClient] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [success, setSuccess] = useState('')
   const [busy, setBusy] = useState(false)
@@ -219,9 +222,24 @@ export function Settings() {
               <Notice>
                 Run daily. Each sweep processes up to 100 pending uploads; repeat if more remain.
               </Notice>
+              <Field label="Client account for cleanup">
+                <select value={cleanupClient} onChange={(e) => setCleanupClient(e.target.value)}>
+                  <option value="">
+                    {operator ? 'All accounts (operator)' : 'Select an assigned account'}
+                  </option>
+                  {clients.data
+                    ?.filter((c) => c.active)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              {clients.error && <ErrorBox error={clients.error} />}
               <button
                 className="btn red"
-                disabled={busy}
+                disabled={busy || (!operator && !cleanupClient)}
                 onClick={async () => {
                   setBusy(true)
                   setError(null)
@@ -229,7 +247,7 @@ export function Settings() {
                   try {
                     const result = await edge<{ removed: number; more_possible: boolean }>(
                       'files',
-                      { action: 'cleanup' },
+                      { action: 'cleanup', client_id: cleanupClient || null },
                     )
                     setSuccess(
                       `${result.removed} abandoned uploads removed.${result.more_possible ? ' Run cleanup again to process remaining uploads.' : ''}`,

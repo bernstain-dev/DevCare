@@ -328,9 +328,7 @@ function InternalNotes({ id }: { id: string }) {
         <Badge value="Admin only" />
       </div>
       <div className="panel-padding">
-        <Notice>
-          Private to active administrators. Clients cannot access these notes through the UI or API.
-        </Notice>
+        <Notice>Private to active administrators assigned to this business account.</Notice>
         {query.isPending ? (
           <Spinner />
         ) : query.error ? (

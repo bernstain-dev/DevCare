@@ -32,6 +32,12 @@ export interface Membership {
   active: boolean
   created_at: string
 }
+export interface AdminMembership {
+  client_id: string
+  user_id: string
+  active: boolean
+  created_at: string
+}
 export interface Project {
   id: string
   client_id: string

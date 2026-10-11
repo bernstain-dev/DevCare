@@ -8,6 +8,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
+import {
+  seedBeforeScopedMigration,
+  verifyPreservedMigration,
+  scopedDatabaseChecks,
+} from './scoped-database-checks.mjs'
 
 const bin =
   process.env.POSTGRES_BIN ??
@@ -37,6 +42,7 @@ let started = false
 let root
 const config = { host: '127.0.0.1', port, user: 'postgres', database: 'postgres' }
 const adminId = randomUUID(),
+  operatorId = randomUUID(),
   aId = randomUUID(),
   bId = randomUUID(),
   a2Id = randomUUID()
@@ -51,6 +57,7 @@ async function user(id, fn, role = 'authenticated') {
   try {
     await c.query(`set role ${role}`)
     await c.query("select set_config('request.jwt.claim.sub',$1,false)", [id ?? ''])
+    await c.query("select set_config('request.jwt.claim.role',$1,false)", [role])
     return await fn(c)
   } finally {
     await c.end()
@@ -81,18 +88,48 @@ try {
   await root.connect()
   await root.query(`create role anon;create role authenticated;create role service_role bypassrls;
  create schema auth;create schema storage;create schema extensions;
- create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
+ create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}',encrypted_password text default 'preserved-password-hash',email_confirmed_at timestamptz default now(),invited_at timestamptz default now());
  create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+ create function auth.role() returns text language sql stable as $$ select current_setting('request.jwt.claim.role',true) $$;
  grant usage on schema auth to anon,authenticated,service_role;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb);
  alter table storage.objects enable row level security;`)
+  let preserved
   for (const file of (await readdir('supabase/migrations'))
     .filter((x) => x.endsWith('.sql'))
-    .sort())
+    .sort()) {
+    if (file === '202610110001_scoped_administrators.sql') {
+      preserved = await seedBeforeScopedMigration(root)
+      if (process.env.DEVCARE_TEST_PARTIAL_ADMIN_SCHEMA === '1') {
+        await root.query(`create table public.admin_client_memberships (
+          client_id uuid not null references public.clients(id) on delete cascade,
+          user_id uuid not null references public.profiles(id) on delete cascade,
+          active boolean not null default true, primary key(client_id,user_id));
+          create function public.can_admin_client(p_client uuid) returns boolean
+          language sql stable security definer set search_path = '' as $$ select false $$;`)
+        await root.query('insert into public.admin_client_memberships(client_id,user_id,active) values($1,$2,false)',
+          [preserved.client, preserved.admin])
+        preserved.adminMemberships = (await root.query('select client_id,user_id,active from public.admin_client_memberships order by client_id,user_id')).rows
+        // An incompatible partial installation must fail before changing records.
+        await root.query('alter table public.admin_client_memberships alter column active drop not null')
+        await assert.rejects(root.query(await readFile(join('supabase/migrations', file), 'utf8')),
+          (error) => error.code === 'P0001' && error.message.includes('requires operator review'))
+        await root.query('rollback')
+        ok((await root.query("select to_regclass('public.platform_operators') as table_name")).rows[0].table_name === null,
+          'Incompatible partial migration rolled back without new tables')
+        assert.deepEqual((await root.query('select client_id,user_id,active from public.admin_client_memberships order by client_id,user_id')).rows,
+          preserved.adminMemberships, 'Rejected partial migration preserves membership rows')
+        ok(true, 'Rejected partial migration preserves administrator membership records')
+        await root.query('alter table public.admin_client_memberships alter column active set not null')
+      }
+    }
     await root.query(await readFile(join('supabase/migrations', file), 'utf8'))
+  }
+  await verifyPreservedMigration(root, preserved, user, ok)
   console.log('Applied all migrations to isolated PostgreSQL.')
   for (const [id, email, name, metadata] of [
+    [operatorId, 'operator@example.test', 'Trusted operator', {}],
     [adminId, 'admin@example.test', 'Admin', {}],
     [aId, 'a@example.test', 'Client A', { role: 'admin' }],
     [bId, 'b@example.test', 'Client B', {}],
@@ -104,18 +141,23 @@ try {
       { ...metadata, display_name: name },
     ])
   await root.query("update public.profiles set role='admin' where id=$1", [adminId])
+  await user(null, (c) => rpc(c, 'set_platform_operator', [operatorId, true]), 'service_role')
   ok(
     (await root.query('select role from profiles where id=$1', [aId])).rows[0].role === 'client',
     'Metadata cannot grant admin',
   )
-  const accountA = await user(adminId, (c) =>
+  const accountA = await user(operatorId, (c) =>
     rpc(c, 'save_client', [null, 'Account A', '', '', true]),
   )
-  const accountB = await user(adminId, (c) =>
+  const accountB = await user(operatorId, (c) =>
     rpc(c, 'save_client', [null, 'Account B', '', '', true]),
   )
   const ca = accountA.save_client,
     cb = accountB.save_client
+  await user(operatorId, (c) => rpc(c, 'configure_administrator', [adminId, ca]))
+  // Baseline workflow tests explicitly grant both fixture accounts; isolation
+  // tests below revoke B before converting the existing B user into Admin B.
+  await user(operatorId, (c) => rpc(c, 'set_admin_membership', [cb, adminId, true]))
   await user(adminId, async (c) => {
     await rpc(c, 'set_membership', [ca, aId, true])
     await rpc(c, 'set_membership', [ca, a2Id, true])
@@ -452,7 +494,7 @@ try {
       'Disabled client account denies files',
     )
   })
-  await user(adminId, (c) => rpc(c, 'save_client', [ca, 'Account A', '', '', true]))
+  await user(operatorId, (c) => rpc(c, 'save_client', [ca, 'Account A', '', '', true]))
   await user(adminId, (c) => rpc(c, 'set_user_active', [aId, false]))
   await user(aId, async (c) => {
     ok(
@@ -467,9 +509,10 @@ try {
       await root.query(
         "select count(*)::int n from pg_tables where schemaname='public' and rowsecurity",
       )
-    ).rows[0].n === 10,
-    'All ten application tables enable RLS',
+    ).rows[0].n === 12,
+    'All twelve public application/operator tables enable RLS',
   )
+  await scopedDatabaseChecks({ root, user, rpc, ok, deny, adminId, operatorId, aId, bId, ca, cb })
   console.log(
     `PASS: ${checks} PostgreSQL authorization, workflow, concurrency and file-boundary checks.`,
   )

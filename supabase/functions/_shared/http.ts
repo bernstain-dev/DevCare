@@ -45,9 +45,11 @@ export async function caller(req: Request) {
   if (active.error || active.data !== true) throw new HttpError(403, 'Account disabled')
   return { userClient, user: data.user }
 }
-export async function requireAdmin(userClient: Awaited<ReturnType<typeof caller>>['userClient']) {
-  const { data, error } = await userClient.rpc('is_admin')
-  if (error || data !== true) throw new HttpError(403, 'Active administrator required')
+export async function requirePlatformOperator(
+  userClient: Awaited<ReturnType<typeof caller>>['userClient'],
+) {
+  const { data, error } = await userClient.rpc('is_platform_operator')
+  if (error || data !== true) throw new HttpError(403, 'Trusted platform operator required')
 }
 // Call only AFTER authentication and the operation-specific authorization check.
 export function elevated() {

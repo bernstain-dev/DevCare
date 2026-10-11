@@ -67,7 +67,8 @@ function ClientForm({ client, onClose }: { client?: Client; onClose: () => void 
         </label>
         <Notice>
           Disabling a client account immediately blocks its members from its projects, tickets and
-          files, including existing sessions. History is preserved.
+          files, including existing sessions and assigned administrators. A trusted operator must
+          restore a disabled account. History is preserved.
         </Notice>
         <div className="form-actions">
           <button type="button" className="btn gray" onClick={onClose}>
@@ -104,7 +105,7 @@ function Memberships({ client, onClose }: { client: Client; onClose: () => void 
     queryFn: async () => {
       const { data, error, count } = await supabase
         .from('client_memberships')
-        .select('*,profiles!client_memberships_user_id_fkey(*)', { count: 'exact' })
+        .select('*,profiles!client_memberships_user_id_fkey!inner(*)', { count: 'exact' })
         .eq('client_id', client.id)
         .order('created_at')
         .range((page - 1) * 10, page * 10 - 1)
@@ -327,7 +328,8 @@ export function Clients() {
             </div>
           ) : (
             <Empty title="No client accounts found">
-              Add your first client to start assigning projects.
+              An operator must assign your initial business account. You can then add clients within
+              your own workspace.
             </Empty>
           )}
           <Pagination page={page} count={query.data.count} onChange={setPage} />

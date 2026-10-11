@@ -17,6 +17,7 @@ interface AuthValue {
   profile: Profile | null
   loading: boolean
   error: string | null
+  operator: boolean
   refresh: () => Promise<void>
   logout: () => Promise<void>
 }
@@ -27,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [operator, setOperator] = useState(false)
+  const accessScope = useRef<string | null>(null)
   const identity = useRef<string | null>(null)
   const generation = useRef(0)
   const refresh = useCallback(async () => {
@@ -40,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cache.clear()
       identity.current = current?.user.id ?? null
       setProfile(null)
+      setOperator(false)
+      accessScope.current = null
     }
     setSession(current)
     if (sessionError) setError(sessionError.message)
@@ -47,15 +52,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await supabase.from('profiles').select('*').eq('id', current.user.id).single()
       if (request !== generation.current) return
       if (result.error) {
+        cache.clear()
         setProfile(null)
+        setOperator(false)
         setError('Unable to load your access profile. Retry or contact your developer.')
       } else {
+        const context = await supabase.rpc('access_context')
+        if (request !== generation.current) return
+        if (context.error || typeof context.data?.scope !== 'string') {
+          cache.clear()
+          setProfile(null)
+          setOperator(false)
+          setError('Unable to verify account access. Retry or contact your operator.')
+          setLoading(false)
+          return
+        }
+        if (accessScope.current !== context.data.scope) cache.clear()
+        accessScope.current = context.data.scope
+        setOperator(context.data.operator === true)
         setProfile(result.data as Profile)
         setError(null)
         if (!result.data.active) cache.clear()
       }
     } else {
       setProfile(null)
+      setOperator(false)
       cache.clear()
     }
     setLoading(false)
@@ -75,6 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (identity.current !== (next?.user.id ?? null)) {
         identity.current = next?.user.id ?? null
         setProfile(null)
+        setOperator(false)
+        accessScope.current = null
         cache.clear()
         setLoading(Boolean(next))
       }
@@ -95,10 +118,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cache.clear()
     setSession(null)
     setProfile(null)
+    setOperator(false)
   }
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading: configured ? loading : false, error, refresh, logout }}
+      value={{
+        session,
+        profile,
+        operator,
+        loading: configured ? loading : false,
+        error,
+        refresh,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

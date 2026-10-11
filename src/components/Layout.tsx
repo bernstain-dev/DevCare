@@ -10,6 +10,7 @@ import {
   Settings,
   Ticket,
   Users,
+  ShieldCheck,
   X,
   ArrowUpRight,
   PanelLeftClose,
@@ -29,7 +30,7 @@ function subscribeMobile(callback: () => void) {
 const isMobile = () => window.matchMedia(mediaQuery).matches
 
 export function Layout() {
-  const { profile, logout } = useAuth()
+  const { profile, operator, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -58,7 +59,8 @@ export function Layout() {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/projects', label: admin ? 'Projects' : 'My Projects', icon: FolderKanban },
     ...(admin ? [{ to: '/clients', label: 'Clients', icon: Users }] : []),
-    { to: '/tickets', label: admin ? 'All Tickets' : 'My Tickets', icon: Ticket },
+    ...(operator ? [{ to: '/administrators', label: 'Administrators', icon: ShieldCheck }] : []),
+    { to: '/tickets', label: admin ? 'Assigned Tickets' : 'My Tickets', icon: Ticket },
     { to: '/notifications', label: 'Notifications', icon: Bell },
     { to: '/settings', label: 'Profile & Settings', icon: Settings },
   ]

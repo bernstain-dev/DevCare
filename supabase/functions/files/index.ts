@@ -6,7 +6,7 @@ import {
   failure,
   HttpError,
   json,
-  requireAdmin,
+  requirePlatformOperator,
 } from '../_shared/http.ts'
 import { MAX_BYTES, validFile } from './validation.ts'
 
@@ -39,7 +39,11 @@ Deno.serve(async (req) => {
         p_mime: file.type,
         p_size: file.size,
       })
-      if (reservation.error) throw new HttpError(403, reservation.error.message)
+      if (reservation.error)
+        throw new HttpError(
+          403,
+          'Upload unavailable. Check ticket access, authorship and attachment limits.',
+        )
       const attachment = reservation.data
       const admin = elevated()
       try {
@@ -87,24 +91,47 @@ Deno.serve(async (req) => {
     if (body.action === 'download') {
       const result = await userClient
         .from('attachments')
-        .select('object_path,file_name')
+        .select('id,ticket_id,object_path,file_name')
         .eq('id', body.attachment_id)
         .eq('state', 'ready')
         .single()
       if (result.error) throw new HttpError(404, 'Attachment unavailable or access disabled')
-      const signed = await elevated()
+      const download = await elevated()
         .storage.from('ticket-attachments')
-        .createSignedUrl(result.data.object_path, 60, { download: result.data.file_name })
-      if (signed.error) throw new HttpError(502, 'Download unavailable. Try again.')
-      return json({ url: signed.data.signedUrl, expires_in: 60 }, 200, headers)
+        .download(result.data.object_path)
+      if (download.error) throw new HttpError(502, 'Download unavailable. Try again.')
+      // No reusable signed URL: current RLS is checked again before returning bytes.
+      const recheck = await userClient
+        .from('attachments')
+        .select('id')
+        .eq('id', result.data.id)
+        .eq('state', 'ready')
+        .single()
+      if (recheck.error) throw new HttpError(403, 'Attachment unavailable or access disabled')
+      return new Response(download.data, {
+        headers: {
+          ...headers,
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(result.data.file_name)}`,
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
     }
     if (body.action === 'cleanup') {
-      await requireAdmin(userClient)
+      const clientId = body.client_id ? String(body.client_id) : null
+      if (!clientId) await requirePlatformOperator(userClient)
+      const stale = clientId
+        ? await userClient.rpc('claim_client_attachments', { p_client: clientId })
+        : await elevated().rpc('claim_abandoned_attachments')
+      if (stale.error) throw new HttpError(403, 'Cleanup unavailable or access disabled')
       const admin = elevated()
-      const stale = await admin.rpc('claim_abandoned_attachments')
-      if (stale.error) throw new HttpError(500, 'Cleanup lookup failed')
       let removed = 0
       for (const row of stale.data) {
+        const allowed = clientId
+          ? await userClient.rpc('can_admin_ticket', { p_ticket: row.ticket_id })
+          : await userClient.rpc('is_platform_operator')
+        if (allowed.error || allowed.data !== true)
+          throw new HttpError(403, 'Cleanup access disabled')
         const result = await admin.storage.from('ticket-attachments').remove([row.object_path])
         if (!result.error) {
           const deleted = await admin

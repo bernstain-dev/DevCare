@@ -73,7 +73,7 @@ export function Tickets() {
   return (
     <>
       <PageTitle
-        title={profile?.role === 'admin' ? 'All Tickets' : 'My Tickets'}
+        title={profile?.role === 'admin' ? 'Assigned Tickets' : 'My Tickets'}
         description="Every request, conversation, and next step."
         action={
           <Link className="btn green" to="/tickets/new">

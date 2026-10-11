@@ -2,7 +2,88 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { adminConfig, bootstrapAdmin, recoverAdminPassword } from './admin-setup.mjs'
 import { hiddenPassword } from './operator-prompt.mjs'
+import { configureScopedAdmin } from './scoped-admin.mjs'
 import { PassThrough } from 'node:stream'
+
+const scopedUserId = '11111111-1111-4111-8111-111111111111'
+const scopedClientId = '22222222-2222-4222-8222-222222222222'
+const scopedEnv = {
+  DEVCARE_OPERATOR_ACTION: 'configure',
+  DEVCARE_TARGET_USER_ID: scopedUserId,
+  DEVCARE_TARGET_CLIENT_ID: scopedClientId,
+}
+function scopedOperatorFixture({ rpcError = null, mismatch = false } = {}) {
+  const calls = []
+  const account = { id: scopedUserId, email: 'friend@example.test', role: 'client', active: true }
+  return {
+    calls,
+    admin: {
+      from: () => ({
+        select: () => ({ eq: () => ({ single: async () => ({ data: account, error: null }) }) }),
+      }),
+      // No Auth create/update/invite methods: conversion must use only the existing identity.
+      auth: {
+        admin: {
+          getUserById: async () => ({
+            data: { user: { ...account, id: mismatch ? scopedClientId : scopedUserId } },
+            error: null,
+          }),
+        },
+      },
+      rpc: async (name, args) => {
+        calls.push({ name, args })
+        return { error: rpcError }
+      },
+    },
+  }
+}
+test('scoped operator conversion keeps existing Auth and uses one explicit atomic assignment', async () => {
+  const { admin, calls } = scopedOperatorFixture()
+  assert.match(
+    await configureScopedAdmin(admin, scopedEnv),
+    /credentials and invitation state were preserved/,
+  )
+  assert.deepEqual(calls, [
+    { name: 'configure_administrator', args: { p_user: scopedUserId, p_client: scopedClientId } },
+  ])
+})
+test('scoped operator never guesses a client, identity or action', async () => {
+  for (const update of [
+    { DEVCARE_TARGET_CLIENT_ID: '' },
+    { DEVCARE_TARGET_USER_ID: '' },
+    { DEVCARE_OPERATOR_ACTION: 'admin' },
+  ]) {
+    const { admin, calls } = scopedOperatorFixture()
+    await assert.rejects(configureScopedAdmin(admin, { ...scopedEnv, ...update }))
+    assert.equal(calls.length, 0)
+  }
+})
+test('scoped operator refuses an Auth/profile identity mismatch before mutation', async () => {
+  const { admin, calls } = scopedOperatorFixture({ mismatch: true })
+  await assert.rejects(configureScopedAdmin(admin, scopedEnv), /identity could not be verified/)
+  assert.equal(calls.length, 0)
+})
+test('scoped operator failures withhold backend responses and credentials', async () => {
+  const { admin } = scopedOperatorFixture({
+    rpcError: { message: 'secret-key-or-email', code: '42501' },
+  })
+  await assert.rejects(
+    configureScopedAdmin(admin, scopedEnv),
+    (error) => !error.message.includes('secret-key-or-email') && error.message.includes('rejected'),
+  )
+})
+test('scoped operator assignment and removal cannot silently convert users', async () => {
+  for (const action of ['assign', 'remove']) {
+    const { admin, calls } = scopedOperatorFixture()
+    await configureScopedAdmin(admin, { ...scopedEnv, DEVCARE_OPERATOR_ACTION: action })
+    assert.deepEqual(calls, [
+      {
+        name: 'set_admin_membership',
+        args: { p_user: scopedUserId, p_client: scopedClientId, p_active: action === 'assign' },
+      },
+    ])
+  }
+})
 
 const env = {
   SUPABASE_URL: 'https://project.supabase.co',

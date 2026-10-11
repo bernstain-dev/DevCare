@@ -4,6 +4,8 @@ import { Megaphone } from 'lucide-react'
 import { loadMaintenance } from '../lib/maintenance'
 import { MaintenancePage } from '../pages/Maintenance'
 import { Spinner } from './ui'
+import { UpdateCompleteAnimation } from './UpdateCompleteAnimation'
+import { UPDATE_RELEASE_ID, updateCompletion } from '../lib/updateComplete'
 
 // Keep Auth and Supabase initialization behind the availability check.
 const Portal = lazy(() => import('../Portal'))
@@ -19,6 +21,11 @@ export function MaintenanceGate() {
     refetchOnWindowFocus: true,
   })
   const announcement = !status.isError && status.data?.mode === 'announcement'
+  const maintenanceRelease = status.data?.release_id ?? UPDATE_RELEASE_ID
+  useLayoutEffect(() => {
+    if (!status.isError && status.data?.mode === 'maintenance')
+      updateCompletion.rememberMaintenance(maintenanceRelease)
+  }, [status.isError, status.data?.mode, maintenanceRelease])
   useLayoutEffect(() => {
     const root = container.current
     const banner = root?.querySelector('.maintenance-announcement')
@@ -64,6 +71,13 @@ export function MaintenanceGate() {
       )}
       <Suspense fallback={<Spinner />}>
         <Portal />
+        {status.data.mode === 'off' && (
+          <UpdateCompleteAnimation
+            key={UPDATE_RELEASE_ID}
+            releaseId={UPDATE_RELEASE_ID}
+            publishedReleaseId={status.data.release_id}
+          />
+        )}
       </Suspense>
     </div>
   )

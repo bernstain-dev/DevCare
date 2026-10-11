@@ -4,6 +4,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes, randomUUID } from 'node:crypto'
 import assert from 'node:assert/strict'
+import { scopedIntegrationChecks } from './scoped-integration-checks.mjs'
 const {
   SUPABASE_URL: URL,
   SUPABASE_PUBLISHABLE_KEY: KEY,
@@ -46,17 +47,24 @@ async function makeUser(name) {
   return good(result, `Create ${name}`).user
 }
 const adminUser = await makeUser('admin'),
+  operatorUser = await makeUser('operator'),
   aUser = await makeUser('a'),
   bUser = await makeUser('b')
 good(
   await elevated.from('profiles').update({ role: 'admin' }).eq('id', adminUser.id),
   'Bootstrap disposable admin',
 )
+good(
+  await elevated.rpc('set_platform_operator', { p_user: operatorUser.id, p_active: true }),
+  'Bootstrap separate disposable operator',
+)
 const admin = client(),
+  operator = client(),
   a = client(),
   b = client()
 for (const [connection, user] of [
   [admin, adminUser],
+  [operator, operatorUser],
   [a, aUser],
   [b, bUser],
 ])
@@ -67,7 +75,7 @@ assert.equal(
 )
 checks++
 const ca = good(
-  await admin.rpc('save_client', {
+  await operator.rpc('save_client', {
     p_id: null,
     p_name: `A ${tag}`,
     p_email: '',
@@ -77,7 +85,7 @@ const ca = good(
   'Create account A',
 )
 const cb = good(
-  await admin.rpc('save_client', {
+  await operator.rpc('save_client', {
     p_id: null,
     p_name: `B ${tag}`,
     p_email: '',
@@ -85,6 +93,18 @@ const cb = good(
     p_active: true,
   }),
   'Create account B',
+)
+good(
+  await operator.rpc('configure_administrator', { p_user: adminUser.id, p_client: ca }),
+  'Initial explicit admin A assignment',
+)
+good(
+  await operator.rpc('set_admin_membership', {
+    p_user: adminUser.id,
+    p_client: cb,
+    p_active: true,
+  }),
+  'Explicit baseline test assignment B',
 )
 for (const [account, user] of [
   [ca, aUser],
@@ -248,13 +268,12 @@ denied(
   await b.functions.invoke('files', { body: { action: 'download', attachment_id: file.id } }),
   'Cross-account file download denied',
 )
-const signed = good(
+const downloaded = good(
   await a.functions.invoke('files', { body: { action: 'download', attachment_id: file.id } }),
-  'Signed download',
+  'Authenticated byte download',
 )
-const downloaded = await fetch(signed.url)
-assert.equal(downloaded.status, 200)
-assert.equal((await downloaded.arrayBuffer()).byteLength, png.length)
+assert.ok(downloaded instanceof Blob)
+assert.equal(downloaded.size, png.length)
 checks += 2
 denied(
   await a.storage
@@ -264,7 +283,7 @@ denied(
 )
 denied(await a.functions.invoke('files', { body: { action: 'cleanup' } }), 'Client cleanup denied')
 good(
-  await admin.functions.invoke('files', { body: { action: 'cleanup' } }),
+  await admin.functions.invoke('files', { body: { action: 'cleanup', client_id: ca } }),
   'Admin cleanup preserves ready files',
 )
 // Real Auth invitation verification and password recovery, with generated test
@@ -350,6 +369,27 @@ good(
 )
 assert.equal(good(await a.from('projects').select('*'), 'Disabled business GET').length, 0)
 checks++
+await scopedIntegrationChecks({
+  elevated,
+  operator,
+  admin,
+  a,
+  b,
+  adminUser,
+  aUser,
+  bUser,
+  ca,
+  cb,
+  pa,
+  pb,
+  password,
+  makeUser,
+  client,
+  upload,
+  args,
+  good,
+  denied,
+})
 console.log(
   `PASS: ${checks} real Supabase integration checks. SMTP inbox delivery, hosted callback navigation and Cloudflare refresh still need release smoke testing.`,
 )

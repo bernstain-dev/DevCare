@@ -62,7 +62,7 @@ export async function bootstrapAdmin(admin, { email, siteUrl }) {
     fail('Profile lookup failed. Apply migrations and verify the project URL/server key.', lookup)
   if (admins.length) {
     if (admins.length === 1 && admins[0].email.toLowerCase() === email && admins[0].active)
-      return 'Your admin account already exists and is active. Sign in, or use Forgot password to set a new password. No invitation was sent.'
+      return 'Your admin account already exists and is active. Client access requires explicit scoped assignments through the operator procedure. Sign in, or use Forgot password to set a new password. No invitation was sent.'
     throw new Error(
       'An admin already exists. No accounts were changed. Use the trusted operator recovery procedure in DEPLOYMENT.md.',
     )
@@ -99,7 +99,7 @@ export async function bootstrapAdmin(admin, { email, siteUrl }) {
       'Admin promotion failed. Confirm the profile trigger/migrations and use operator recovery in DEPLOYMENT.md.',
       promotion.error,
     )
-  return 'First admin created. Open the invitation email to set your password, or sign in with your existing account. Remove .env.admin after setup and protect the operator key.'
+  return 'First admin created. No client access is granted until an operator configures its explicit business assignment. Open the invitation email to set your password, or sign in with your existing account. Remove .env.admin after setup and protect the operator key.'
 }
 
 export async function recoverAdminPassword(admin, email, readPassword) {
